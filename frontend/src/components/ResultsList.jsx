@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 function formatValue(value) {
   return String(value).replace(/_/g, " ");
 }
@@ -10,12 +12,14 @@ export default function ResultsList({ results, loading }) {
     <div className="results-grid">
       {results.map((item) => (
         <article className="result-card" key={item.variant_id}>
-          <a href={item.url} target="_blank" rel="noopener noreferrer">
+          <Link to={`/product/${item.variant_id}`}>
             <img src={item.image_url} alt={`${item.brand} ${item.model_name}`} loading="lazy" />
-          </a>
+          </Link>
           <div className="result-info">
-            <div className="result-brand">{item.brand}</div>
-            <div className="result-name">{item.model_name}</div>
+            <Link to={`/product/${item.variant_id}`} className="result-link">
+              <div className="result-brand">{item.brand}</div>
+              <div className="result-name">{item.model_name}</div>
+            </Link>
             <div className="result-meta">
               {item.size_raw} · {formatValue(item.color)} · {item.shop_name}
             </div>
