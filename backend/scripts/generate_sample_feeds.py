@@ -11,28 +11,17 @@ Usage: python scripts/generate_sample_feeds.py
 """
 import csv
 import random
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from app.normalize.brand import CANONICAL_BRANDS as BRANDS  # noqa: E402
 
 random.seed(42)
 
 SAMPLES_DIR = Path(__file__).resolve().parent.parent / "data" / "samples"
-
-# Canonical brand -> spelling variants a messy feed might use.
-BRANDS = {
-    "Levi's": ["Levi's", "LEVIS", "Levi Strauss & Co."],
-    "Wrangler": ["Wrangler", "WRANGLER"],
-    "Lee": ["Lee", "LEE Jeans"],
-    "Diesel": ["Diesel", "DIESEL"],
-    "Tommy Hilfiger": ["Tommy Hilfiger", "Tommy Hilfiger Denim", "TOMMY HILFIGER"],
-    "Calvin Klein": ["Calvin Klein", "Calvin Klein Jeans", "CK"],
-    "G-Star": ["G-Star", "G-Star RAW", "G STAR"],
-    "Pepe Jeans": ["Pepe Jeans", "PEPE JEANS LONDON"],
-    "Jack & Jones": ["Jack & Jones", "JACK JONES", "Jack&Jones"],
-    "Nudie Jeans": ["Nudie Jeans", "NUDIE"],
-    "Replay": ["Replay", "REPLAY"],
-    "BOSS": ["BOSS", "Hugo Boss"],
-}
 
 MODEL_SUFFIXES = [
     "501 Original", "511 Slim", "Skinny Fit", "Loose Tapered", "Regular Straight",
