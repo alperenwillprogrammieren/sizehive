@@ -25,6 +25,11 @@ CANONICAL_BRANDS: dict[str, list[str]] = {
     "Nudie Jeans": ["Nudie Jeans", "NUDIE"],
     "Replay": ["Replay", "REPLAY"],
     "BOSS": ["BOSS", "Hugo Boss"],
+    "Nike": ["Nike", "NIKE"],
+    "Adidas": ["Adidas", "ADIDAS", "adidas Originals"],
+    "Puma": ["Puma", "PUMA"],
+    "New Balance": ["New Balance", "NEW BALANCE", "NB"],
+    "Vans": ["Vans", "VANS"],
 }
 
 _ALIAS_TO_CANONICAL: dict[str, str] = {

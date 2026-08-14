@@ -17,6 +17,13 @@ const ATTRIBUTE_LABELS = {
   material: "Material",
   pockets: "Taschen",
   sustainability: "Nachhaltigkeit",
+  sleeve: "Ärmel",
+  neckline: "Ausschnitt",
+  print: "Print",
+  upper_material: "Obermaterial",
+  sole_type: "Sohle",
+  closure_type: "Verschlussart",
+  style: "Schafthöhe",
 };
 
 function AttributeBadge({ name, value, sourceInfo }) {
@@ -73,6 +80,7 @@ export default function ProductDetailPage() {
         <img className="detail-image" src={detail.image_url} alt={`${detail.brand} ${detail.model_name}`} />
 
         <div className="detail-info">
+          <div className="result-category">{detail.category}</div>
           <div className="detail-brand">{detail.brand}</div>
           <h1 className="detail-name">{detail.model_name}</h1>
           <div className="detail-meta">

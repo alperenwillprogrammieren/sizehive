@@ -11,9 +11,7 @@ from pathlib import Path
 from typing import Iterator
 
 from app.importers.common import derive_model_name, parse_price_cents
-
-CATEGORY = "Herrenjeans"
-GENDER = "male"
+from app.taxonomy import gender_for_category
 
 
 def parse_awin_csv(path: Path) -> Iterator[dict]:
@@ -26,8 +24,8 @@ def parse_awin_csv(path: Path) -> Iterator[dict]:
                 "brand": row["brand"],
                 "model_name": derive_model_name(row["product_name"], row["brand"]),
                 "description": row["description"],
-                "category": CATEGORY,
-                "gender": GENDER,
+                "category": row["category"],
+                "gender": gender_for_category(row["category"]),
                 "size_raw": row["size"],
                 "color": row["color"],
                 "price_cents": parse_price_cents(row["price"]),
@@ -48,8 +46,8 @@ def parse_belboon_csv(path: Path) -> Iterator[dict]:
                 "brand": row["MARKE"],
                 "model_name": derive_model_name(row["TITEL"], row["MARKE"]),
                 "description": row["BESCHREIBUNG"],
-                "category": CATEGORY,
-                "gender": GENDER,
+                "category": row["WARENGRUPPE"],
+                "gender": gender_for_category(row["WARENGRUPPE"]),
                 "size_raw": row["GROESSE"],
                 "color": row["FARBE"],
                 "price_cents": parse_price_cents(row["PREIS_EUR"], decimal_sep=","),
@@ -70,8 +68,8 @@ def parse_tradedoubler_xml(path: Path) -> Iterator[dict]:
             "brand": text("brand"),
             "model_name": derive_model_name(text("title"), text("brand")),
             "description": text("description"),
-            "category": CATEGORY,
-            "gender": GENDER,
+            "category": text("category"),
+            "gender": gender_for_category(text("category")),
             "size_raw": text("size"),
             "color": text("colour"),
             "price_cents": parse_price_cents(text("price")),

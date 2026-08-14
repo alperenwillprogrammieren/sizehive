@@ -6,9 +6,8 @@ short generic words and win a higher confidence score, since a hit on
 "stonewashed" is a lot more trustworthy than a hit on a single generic
 word like "raw".
 """
-import re
-
 from app.extract.base import ExtractedAttribute
+from app.extract.common import extract_material, match_keywords
 
 # canonical value -> phrases that imply it, most specific first
 FIT_KEYWORDS: dict[str, list[str]] = {
@@ -51,18 +50,9 @@ SUSTAINABILITY_KEYWORDS: dict[str, list[str]] = {
     "organic_cotton": ["bio-baumwolle", "organic cotton", "bio baumwolle"],
 }
 
-_COTTON_RE = re.compile(r"(\d{1,3})\s*%\s*(?:baumwolle|cotton)", re.IGNORECASE)
-_ELASTANE_RE = re.compile(r"(\d{1,3})\s*%\s*(?:elasthan|elastane)", re.IGNORECASE)
+import re
+
 _POCKETS_RE = re.compile(r"(\d{1,2})\s*(?:taschen|pockets)", re.IGNORECASE)
-
-
-def _match_keywords(text_lower: str, keywords: dict[str, list[str]]) -> tuple[str, float] | None:
-    for value, phrases in keywords.items():
-        for phrase in phrases:
-            if phrase in text_lower:
-                confidence = 0.9 if " " in phrase or "-" in phrase else 0.65
-                return value, confidence
-    return None
 
 
 class RuleBasedExtractor:
@@ -79,22 +69,16 @@ class RuleBasedExtractor:
             ("wash", WASH_KEYWORDS),
             ("closure", CLOSURE_KEYWORDS),
         ):
-            hit = _match_keywords(text_lower, keywords)
+            hit = match_keywords(text_lower, keywords)
             if hit:
                 value, confidence = hit
                 result[attr] = ExtractedAttribute(value=value, source="rule", confidence=confidence)
 
-        cotton = _COTTON_RE.search(text_lower)
-        elastane = _ELASTANE_RE.search(text_lower)
-        if cotton or elastane:
-            material = {}
-            if cotton:
-                material["cotton_pct"] = int(cotton.group(1))
-            if elastane:
-                material["elastane_pct"] = int(elastane.group(1))
+        material = extract_material(text_lower)
+        if material:
             result["material"] = ExtractedAttribute(value=material, source="rule", confidence=0.95)
             result["stretch"] = ExtractedAttribute(
-                value=bool(elastane) or "stretch" in text_lower, source="rule", confidence=0.85,
+                value="elastane_pct" in material or "stretch" in text_lower, source="rule", confidence=0.85,
             )
         elif "stretch" in text_lower:
             result["stretch"] = ExtractedAttribute(value=True, source="rule", confidence=0.7)

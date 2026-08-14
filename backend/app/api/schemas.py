@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class SearchResultItem(BaseModel):
     variant_id: int
     product_id: int
+    category: str
     brand: str
     model_name: str
     attributes: dict
@@ -47,6 +48,7 @@ class PricePoint(BaseModel):
 
 class VariantDetailResponse(BaseModel):
     variant_id: int
+    category: str
     brand: str
     model_name: str
     description: str
@@ -68,8 +70,12 @@ class VariantDetailResponse(BaseModel):
     price_history: list[PricePoint]
 
 
-class DashboardResponse(BaseModel):
+class CategoryCoverage(BaseModel):
+    category: str
     total_products: int
     coverage: dict[str, float]
-    products_with_fit_and_wash: int
-    products_with_fit_and_wash_pct: float
+
+
+class DashboardResponse(BaseModel):
+    total_products: int
+    by_category: list[CategoryCoverage]

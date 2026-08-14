@@ -10,7 +10,7 @@ function App() {
       <header className="app-header">
         <div>
           <h1>sizehive</h1>
-          <p className="tagline">Herrenjeans, shopübergreifend gefiltert</p>
+          <p className="tagline">Kleidung, shopübergreifend gefiltert</p>
         </div>
         <nav className="app-nav">
           <NavLink to="/" end>

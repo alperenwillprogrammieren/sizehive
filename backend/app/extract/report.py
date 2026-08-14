@@ -1,32 +1,40 @@
-"""Coverage report: for each Kür attribute, what fraction of products have it."""
-from collections import Counter
+"""Coverage report: per category, what fraction of its products have each
+Kür attribute. Grouped by category because different categories have
+different attribute vocabularies (a T-Shirt has no "wash") — a single
+blended global number would hide exactly the thing this report exists to
+surface, per spec: "wo die Extraktion schwächelt".
+"""
+from collections import Counter, defaultdict
 
 from app.models import Product
 
-TRACKED_ATTRIBUTES = [
-    "fit", "rise", "leg_shape", "wash", "material", "stretch", "closure", "pockets", "sustainability",
-]
 
-
-def coverage_report(products: list[Product]) -> dict[str, float]:
-    total = len(products)
-    if total == 0:
-        return {attr: 0.0 for attr in TRACKED_ATTRIBUTES}
-    counts = Counter()
+def coverage_report(products: list[Product]) -> dict[str, dict[str, float]]:
+    """category -> {attribute: coverage_fraction}. Attribute keys are discovered
+    per category from whatever extractor actually wrote into `attributes` —
+    nothing hardcoded, so a new category needs no change here."""
+    by_category: dict[str, list[Product]] = defaultdict(list)
     for product in products:
-        for attr in TRACKED_ATTRIBUTES:
-            if attr in product.attributes:
-                counts[attr] += 1
-    return {attr: counts[attr] / total for attr in TRACKED_ATTRIBUTES}
+        by_category[product.category].append(product)
+
+    report: dict[str, dict[str, float]] = {}
+    for category, cat_products in by_category.items():
+        total = len(cat_products)
+        keys = sorted({key for p in cat_products for key in p.attributes.keys()})
+        counts = Counter()
+        for p in cat_products:
+            for key in keys:
+                if key in p.attributes:
+                    counts[key] += 1
+        report[category] = {key: counts[key] / total for key in keys} if total else {}
+    return report
 
 
 def print_report(products: list[Product]) -> None:
-    total = len(products)
     report = coverage_report(products)
-    print(f"attribute coverage over {total} products:")
-    for attr, pct in report.items():
-        print(f"  {attr:15s} {pct * 100:5.1f}%")
-
-    both_fit_and_wash = sum(1 for p in products if "fit" in p.attributes and "wash" in p.attributes)
-    pct = both_fit_and_wash / total * 100 if total else 0.0
-    print(f"products with BOTH fit and wash: {both_fit_and_wash}/{total} ({pct:.1f}%)")
+    print(f"attribute coverage over {len(products)} products, by category:")
+    for category, coverage in report.items():
+        n = sum(1 for p in products if p.category == category)
+        print(f"  {category} ({n} products):")
+        for attr, pct in coverage.items():
+            print(f"    {attr:15s} {pct * 100:5.1f}%")

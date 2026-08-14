@@ -2,113 +2,147 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project status
-
-This repo is currently a bare scaffold (`main.py` is the unmodified PyCharm template). The
-full product spec lives at `docs/SPEC.md` — read it before doing any work here, it is the
-source of truth for scope, data model, and milestones. Everything below is derived from that
-spec and describes the target architecture as milestones M0–M7 are built out.
-
 ## What sizehive is
 
 A webapp that makes clothing searchable across shops. Individual shops each have their own
 filters that don't work across sites, and price comparators (Idealo etc.) compare price but not
 clothing attributes. Sizehive's differentiator: faceted search across *many* garment attributes
 simultaneously (fit, rise, leg shape, wash, material, stretch, closure, etc.), not just size and
-price, across all connected shops in one query.
+price, across all connected shops in one query — plus free-text search combinable with those
+filters.
 
-MVP scope is deliberately narrow: one category (men's jeans), three data sources, but the
-attribute architecture must support adding a new category as pure configuration — never a schema
-change.
-
-## Working style for this project
-
-The spec's own instructions (see `docs/SPEC.md`, section "Arbeitsweise") set the operating mode:
-
-- Work through milestones M0–M7 in order, making technical decisions autonomously (choice of
-  libraries, file/folder layout, etc.) without stopping to ask.
-- Commit after each milestone with a message that lets that step be reverted independently.
-- After each milestone, verify its own "Fertig, wenn" (done-when) criterion before moving on;
-  fix it before proceeding if it doesn't hold.
-- Record significant technical decisions and their rationale in `docs/DECISIONS.md` as they're
-  made.
-- Only stop and ask the user when genuinely blocked on something outside Claude's control
-  (credentials, accounts, external approvals — e.g. affiliate network publisher access).
-
-## Architecture (target, per spec)
-
-**Repo layout:** `backend/` and `frontend/` as separate top-level folders.
-
-- **Backend:** Python, FastAPI, SQLAlchemy, Alembic.
-- **Database:** PostgreSQL. Attributes are stored as JSONB with a GIN index rather than as fixed
-  columns, so new attributes/categories don't require migrations. Fields that are almost always
-  filtered on (size, price) stay as real columns for performance.
-- **Frontend:** React via Vite (JavaScript, not TypeScript).
-- **Infra:** Docker Compose for Postgres and services. Vite dev server proxies `/api` to the
-  backend; CORS is configured for the Vite dev server.
-
-### Data model
-
-Four tables:
-
-- `shop` — id, name, slug, affiliate_network
-- `product` — id, brand, model_name, category, gender, `attributes` (JSONB), `attribute_sources` (JSONB)
-- `variant` — id, product_id, shop_id, shop_sku, ean (nullable), size_raw, size_w, size_l, color, url
-- `price_snapshot` — id, variant_id, price_cents, list_price_cents, in_stock, captured_at
-
-Key invariant: **`price_snapshot` rows are append-only, never overwritten.** Price history is a
-free side effect of repeated imports, not a separately maintained feature.
-
-### Attribute provenance
-
-Every attribute value carries an origin (`feed`, `rule`, or `llm`) and a confidence score, stored
-in `attribute_sources` alongside `attributes`. Derived (non-feed) attributes must be visually
-distinguishable from feed-sourced ones in the frontend.
-
-**Required attributes** (from feed, structured): `brand`, `price`, `list_price`, `size_w`,
-`size_l`, `color`, `availability`, `gender`, `shop`.
-
-**Derived attributes** (mostly extracted from free-text title/description): `fit` (skinny, slim,
-straight, regular, relaxed, loose, baggy, wide leg), `rise` (low, mid, high), `leg_shape`
-(tapered, straight, bootcut, flared), `wash` (raw, light, mid, dark, black, stonewashed, used,
-destroyed), `material` (cotton/elastane share), `stretch` (yes/no), `closure`, `pockets`,
-`sustainability`.
-
-The rule-based extractor (regex/keyword mapping) must be built as a swappable component — the
-plan is to later place an LLM-based extractor alongside it, not to replace it.
-
-### Data sourcing
-
-Primary path is affiliate product feeds (Awin, Belboon, Tradedoubler) as CSV/XML — not scraping.
-Until publisher access is granted, work uses realistic-but-messy local sample feeds under
-`backend/data/samples/` (mixed size notations, missing EANs, attributes only in free-text
-descriptions, inconsistent brand spellings). Import must be idempotent: re-running an import must
-not duplicate `variant` rows, but must append a new `price_snapshot` per run.
-
-## Explicitly out of scope for MVP
-
-Cross-shop reviews, women's fashion/shoes/other categories, user accounts/wishlists/notifications,
-size conversion between systems (W32 ↔ 48 ↔ M).
-
-## Milestones
-
-Full detail and "done-when" criteria for each are in `docs/SPEC.md`. Summary:
-
-| # | Milestone | Done-when |
-|---|---|---|
-| M0 | Base setup: git, backend FastAPI skeleton + venv, frontend Vite+React, docker-compose (Postgres), Alembic init, `.gitignore`, `.env.example`, `README.md`, CORS + `/api` proxy | Backend & frontend start, `/api/health` responds through the Vite proxy, DB runs in container |
-| M1 | SQLAlchemy models for the 4 tables incl. JSONB + GIN index, Alembic migration | `alembic upgrade head` succeeds, tables exist |
-| M2 | 3 sample feeds (200+ items each), idempotent import script | Two import runs: variant count unchanged, snapshot count doubles |
-| M3 | Size/brand/color normalization parsers (`W32/L34`, `32/34`, `W 32 L 34`, `32x34`, etc.) | Unit tests green for ≥10 real-world spellings per field |
-| M4 | Rule-based attribute extraction from title/description, swappable extractor interface | ≥70% of test articles get a `fit` and a `wash`, coverage report per attribute |
-| M5 | `GET /api/search` (arbitrary attribute combo, price range, size, sort, pagination) + `GET /api/facets` (available values + counts for current filter state) | Endpoints testable in `/docs`, ≥5 combined filters return plausible results |
-| M6 | Frontend: facet sidebar + result list, removable filter chips, filter state in URL | Combine/remove multiple filters in-browser, URL is shareable |
-| M7 | Percentile price score, price-history chart, discount-honesty check (was list price ever real), internal attribute-coverage dashboard | Detail view shows chart + score, dashboard reachable |
+`docs/SPEC.md` is the original product brief (German) that drove the initial build (milestones
+M0–M7, MVP scoped to one category: men's jeans). `docs/DECISIONS.md` records what was actually
+built and why, including a post-MVP extension that added two more categories (T-Shirts, Sneaker)
+and free-text search — read it before making architectural changes, it explains the non-obvious
+tradeoffs. Both are historical/design records; this file describes current state.
 
 ## Commands
 
-Not yet applicable — no backend/frontend scaffold exists until M0 is complete. Once M0 lands,
-this section should be updated with the actual dev/test/migrate commands (expected to be
-FastAPI/uvicorn + pytest on the backend, Vite dev/build on the frontend, `alembic` for
-migrations, `docker compose up` for Postgres) — check `backend/README.md` or the root
-`README.md` created in M0 for the current exact commands rather than assuming.
+```bash
+docker compose up -d db                             # Postgres (host port 55432, see DECISIONS.md)
+```
+
+Backend (from `backend/`, with `.venv` activated):
+```bash
+alembic upgrade head                                 # apply migrations
+python -m app.importers.run                          # load backend/data/samples/*.{csv,xml}
+python -m app.extract.run                             # run attribute extraction, print coverage
+python scripts/simulate_price_history.py              # optional: backfill demo price history
+uvicorn app.main:app --reload --port 8000              # http://localhost:8000/docs
+python -m pytest tests/                                # unit tests (normalizers, extractors)
+python scripts/generate_sample_feeds.py                # regenerate backend/data/samples/*
+```
+
+After any model/migration change during local dev, the fastest path is
+`alembic downgrade base && alembic upgrade head` followed by re-running the three data-pipeline
+commands above — see "Dev data lifecycle" below for why that's fine here specifically.
+
+Frontend (from `frontend/`):
+```bash
+npm install
+npm run dev                                            # http://localhost:5173, proxies /api -> :8000
+```
+
+## Architecture
+
+**Repo layout:** `backend/` (FastAPI + SQLAlchemy + Alembic) and `frontend/` (React + Vite) as
+separate top-level folders. Docker Compose runs Postgres only; both dev servers run natively.
+
+### Data model
+
+Four tables (`backend/app/models/`):
+
+- `shop` — id, name, slug, affiliate_network
+- `product` — id, brand, model_name, category, gender, description, `attributes` (JSONB, GIN
+  index), `attribute_sources` (JSONB)
+- `variant` — id, product_id, shop_id, shop_sku, ean (nullable), size_raw, size_w, size_l, color,
+  url, image_url, created_at
+- `price_snapshot` — id, variant_id, price_cents, list_price_cents, in_stock, captured_at
+
+`price_snapshot` rows are **append-only, never overwritten** — price history is a side effect of
+repeated imports. `product.category` is a plain string column (no enum, no category table): adding
+a category is data, not a migration. `product.description`, `variant.image_url`, and
+`variant.created_at` aren't in the original spec's proposed model — see `docs/DECISIONS.md` for
+why each was added.
+
+### Category = configuration, not schema
+
+This is the load-bearing design decision, proven out by three categories today
+(`Herrenjeans`, `T-Shirts`, `Sneaker`) with more addable without touching the pipeline:
+
+- `app/taxonomy.py` — category → gender mapping.
+- `app/extract/registry.py` — category → `AttributeExtractor` instance
+  (`app/extract/{rules,tshirts,sneakers}.py`, all implementing the `AttributeExtractor` Protocol
+  in `app/extract/base.py`: keyword/regex extraction from title+description into
+  `{attribute: ExtractedAttribute(value, source, confidence)}`). `app/extract/run.py` picks the
+  extractor per product via `get_extractor(product.category)`.
+- `app/extract/report.py` — coverage report is computed **per category**, discovering attribute
+  keys dynamically per category's own products rather than assuming a fixed list (different
+  categories have disjoint attribute vocabularies — a T-Shirt has no `wash`).
+- `app/api/search.py` — Kür-attribute filtering is generic: any query param that isn't in
+  `RESERVED_PARAMS` is applied as `Product.attributes[<param name>].astext == value` (see
+  `SearchFilters.attrs`). `/api/facets` discovers which attribute keys to facet on via
+  `SELECT DISTINCT jsonb_object_keys(attributes)`, minus `NON_SCALAR_ATTRS` (nested/array values
+  like `material`/`sustainability`, which have their own dedicated comparison — `cotton_min`,
+  `sustainability` containment).
+- Frontend mirrors this: `frontend/src/filters.js` treats any non-reserved URL param as a generic
+  attribute filter (`filters.attrs`); `FacetSidebar.jsx` renders whatever facet keys the API
+  returns, with a label dictionary that falls back to the raw key name for anything not curated.
+
+**Adding a category**: add an entry to `app/taxonomy.py` + `app/extract/registry.py`, write an
+extractor class, generate/import some data with that `category` value. No DB migration, no new
+API parameters, no required frontend change (labels are a nice-to-have, not a dependency).
+
+### Attribute provenance
+
+Every attribute in `product.attributes` has a matching entry in `product.attribute_sources`:
+`{"source": "feed"|"rule"|"llm", "confidence": float}`. `fit`/`price`/`size`/etc. from the feed
+itself don't go through `attributes` at all — they're real columns/Pflicht data. Only Kür
+(derived) attributes go through the extractor pipeline and carry provenance; the frontend marks
+these "abgeleitet · NN%" wherever they're shown (search results' `attributes` field, and the
+detail page's attribute badges).
+
+### Import pipeline
+
+`app/importers/adapters.py` has one parser per feed format (`parse_awin_csv`, `parse_belboon_csv`,
+`parse_tradedoubler_xml`) normalizing to a common row shape, including reading `category` directly
+from the feed (not a hardcoded constant — feeds are multi-category). `app/importers/importer.py`
+matches products by normalized `(brand, model_name, category, gender)` — brand is canonicalized
+via `app/normalize/brand.py` *before* matching, which is what lets the same product sold by two
+shops under different brand spellings merge into one product row. Variants match on
+`(shop_id, shop_sku)`, the anchor for idempotent re-imports (new variant rows never duplicate;
+every row always appends a fresh `price_snapshot`).
+
+`app/normalize/{size,brand,color}.py` are static, hand-maintained alias tables / regex parsers —
+not fuzzy matching. Unparseable values (e.g. a bare EU shoe size or letter size hitting the
+jeans-only W/L size parser) are logged via `logging`, not silently dropped or guessed; that's
+correct, expected behavior for non-jeans sizes, not a bug.
+
+### Dev data lifecycle
+
+`backend/data/samples/*.{csv,xml}` are generated, not hand-written — `scripts/generate_sample_feeds.py`
+produces deliberately messy multi-category data (mixed size notations, ~20% missing EANs,
+inconsistent brand spellings, attributes only in free text). Because this is local sample data with
+no real users, the established pattern after any schema or normalization change during development
+has been: `alembic downgrade base && alembic upgrade head`, then re-run
+`app.importers.run` → `app.extract.run` → `scripts/simulate_price_history.py`. That stops being
+appropriate once real affiliate feeds are wired up — at that point schema changes need a real
+migration with backfill, not a reset.
+
+## Explicitly out of scope
+
+Cross-shop reviews, user accounts/wishlists/notifications, size conversion between systems
+(W32 ↔ 48 ↔ EU36, or between the W/L, S–XXL, and EU-shoe-size systems now all present in the
+catalog). Categories beyond the current three are addable per the pattern above but each still
+needs a hand-written extractor — there's no zero-effort "any category" support, despite filtering
+being fully generic once attributes exist.
+
+## Milestones (historical)
+
+M0–M7 (see `docs/SPEC.md` for full detail, `docs/DECISIONS.md` for what was actually decided)
+took the project from an empty repo to: base setup, data model, sample-feed import (idempotent),
+size/brand/color normalization, rule-based attribute extraction, faceted search API, a React
+search frontend, and per-article statistics (percentile price score, price-history chart,
+discount-honesty check, coverage dashboard). All complete. A subsequent request added free-text
+search and the multi-category architecture described above.

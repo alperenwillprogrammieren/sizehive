@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.schemas import DashboardResponse, PricePoint, VariantDetailResponse
+from app.api.schemas import CategoryCoverage, DashboardResponse, PricePoint, VariantDetailResponse
 from app.api.search import _latest_price_subquery, get_session
 from app.extract.report import coverage_report
 from app.models import PriceSnapshot, Product, Shop, Variant
@@ -33,7 +33,8 @@ def variant_detail(variant_id: int, session: Session = Depends(get_session)):
     current = history[-1]
 
     # Percentile score: current price vs. the latest price of every variant
-    # in the same category ("comparable jeans" — MVP has only one category).
+    # in the same category ("comparable" = same category — jeans vs. jeans,
+    # T-Shirt vs. T-Shirt, not jeans vs. sneakers).
     latest = _latest_price_subquery()
     comparable_prices = session.scalars(
         select(PriceSnapshot.price_cents)
@@ -54,6 +55,7 @@ def variant_detail(variant_id: int, session: Session = Depends(get_session)):
 
     return VariantDetailResponse(
         variant_id=variant.id,
+        category=product.category,
         brand=product.brand,
         model_name=product.model_name,
         description=product.description,
@@ -87,11 +89,13 @@ def variant_detail(variant_id: int, session: Session = Depends(get_session)):
 @router.get("/dashboard/coverage", response_model=DashboardResponse)
 def dashboard_coverage(session: Session = Depends(get_session)):
     products = list(session.scalars(select(Product)))
-    coverage = coverage_report(products)
-    both_fit_and_wash = sum(1 for p in products if "fit" in p.attributes and "wash" in p.attributes)
-    return DashboardResponse(
-        total_products=len(products),
-        coverage=coverage,
-        products_with_fit_and_wash=both_fit_and_wash,
-        products_with_fit_and_wash_pct=round(both_fit_and_wash / len(products) * 100, 1) if products else 0.0,
-    )
+    report = coverage_report(products)
+    by_category = [
+        CategoryCoverage(
+            category=category,
+            total_products=sum(1 for p in products if p.category == category),
+            coverage=coverage,
+        )
+        for category, coverage in report.items()
+    ]
+    return DashboardResponse(total_products=len(products), by_category=by_category)

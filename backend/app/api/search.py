@@ -5,11 +5,17 @@ pagination. GET /api/facets computes, for each facet attribute, the
 available values and hit counts under the *other* currently active filters
 (that attribute's own filter is excluded from its own count) — so the
 frontend never has to show a filter option that would return zero results.
-"""
-from dataclasses import dataclass
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Integer, and_, cast, func, select
+Kür (derived) attributes are filtered generically: any query parameter that
+isn't one of the reserved names below is treated as an equality filter on
+Product.attributes[<param name>] — e.g. `?fit=slim` or `?sleeve=short` or
+`?upper_material=leather`. This is what lets a new category (see
+app.taxonomy) add filterable attributes without touching this endpoint.
+"""
+from dataclasses import dataclass, field
+
+from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import Integer, and_, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
@@ -30,10 +36,24 @@ def get_session():
 
 SORT_OPTIONS = {"price_asc", "price_desc", "discount_desc", "newest"}
 
+# Query params with dedicated, non-generic handling (structural filters, or
+# attributes whose comparison isn't flat equality). Everything else in the
+# querystring is treated as a generic Kür-attribute equality filter.
+RESERVED_PARAMS = {
+    "category", "gender", "brand", "color", "size_w", "size_l", "price_min", "price_max",
+    "in_stock_only", "q", "cotton_min", "sustainability", "sort", "page", "page_size",
+}
+
+# JSONB attribute keys that aren't a flat scalar (material is a nested
+# object, sustainability is a tag list) — excluded from the generic
+# equality mechanism and from dynamic facet discovery; each has its own
+# comparison semantics (see cotton_min / sustainability below).
+NON_SCALAR_ATTRS = {"material", "sustainability"}
+
 
 @dataclass
 class SearchFilters:
-    category: str = "Herrenjeans"
+    category: list[str] | None = None
     gender: str | None = None
     brand: list[str] | None = None
     color: list[str] | None = None
@@ -42,18 +62,15 @@ class SearchFilters:
     price_min: float | None = None
     price_max: float | None = None
     in_stock_only: bool = False
-    fit: str | None = None
-    rise: str | None = None
-    leg_shape: str | None = None
-    wash: str | None = None
-    closure: str | None = None
-    stretch: bool | None = None
-    sustainability: str | None = None
+    q: str | None = None
     cotton_min: int | None = None
+    sustainability: str | None = None
+    attrs: dict[str, str] = field(default_factory=dict)
 
 
 def search_filters(
-    category: str = Query("Herrenjeans"),
+    request: Request,
+    category: list[str] | None = Query(None, description="Repeat for multiple categories"),
     gender: str | None = Query(None),
     brand: list[str] | None = Query(None, description="Repeat for multiple brands"),
     color: list[str] | None = Query(None, description="Canonical color slug, e.g. dark_blue"),
@@ -62,20 +79,15 @@ def search_filters(
     price_min: float | None = Query(None, ge=0, description="EUR"),
     price_max: float | None = Query(None, ge=0, description="EUR"),
     in_stock_only: bool = Query(False),
-    fit: str | None = Query(None),
-    rise: str | None = Query(None),
-    leg_shape: str | None = Query(None),
-    wash: str | None = Query(None),
-    closure: str | None = Query(None),
-    stretch: bool | None = Query(None),
-    sustainability: str | None = Query(None, description="e.g. gots, organic_cotton"),
+    q: str | None = Query(None, description="Volltextsuche über Marke, Modell, Beschreibung"),
     cotton_min: int | None = Query(None, ge=0, le=100, description="minimum cotton share, percent"),
+    sustainability: str | None = Query(None, description="e.g. gots, organic_cotton"),
 ) -> SearchFilters:
+    attrs = {key: request.query_params[key] for key in request.query_params.keys() if key not in RESERVED_PARAMS}
     return SearchFilters(
         category=category, gender=gender, brand=brand, color=color, size_w=size_w, size_l=size_l,
-        price_min=price_min, price_max=price_max, in_stock_only=in_stock_only,
-        fit=fit, rise=rise, leg_shape=leg_shape, wash=wash, closure=closure,
-        stretch=stretch, sustainability=sustainability, cotton_min=cotton_min,
+        price_min=price_min, price_max=price_max, in_stock_only=in_stock_only, q=q,
+        cotton_min=cotton_min, sustainability=sustainability, attrs=attrs,
     )
 
 
@@ -102,7 +114,9 @@ def _add_common_joins(stmt):
 
 
 def _apply_filters(stmt, filters: SearchFilters, exclude: str | None = None):
-    conditions = [Product.category == filters.category]
+    conditions = []
+    if filters.category and exclude != "category":
+        conditions.append(Product.category.in_(filters.category))
     if filters.gender:
         conditions.append(Product.gender == filters.gender)
     if filters.brand and exclude != "brand":
@@ -119,23 +133,20 @@ def _apply_filters(stmt, filters: SearchFilters, exclude: str | None = None):
         conditions.append(PriceSnapshot.price_cents <= round(filters.price_max * 100))
     if filters.in_stock_only:
         conditions.append(PriceSnapshot.in_stock.is_(True))
-    if filters.fit and exclude != "fit":
-        conditions.append(Product.attributes["fit"].astext == filters.fit)
-    if filters.rise and exclude != "rise":
-        conditions.append(Product.attributes["rise"].astext == filters.rise)
-    if filters.leg_shape and exclude != "leg_shape":
-        conditions.append(Product.attributes["leg_shape"].astext == filters.leg_shape)
-    if filters.wash and exclude != "wash":
-        conditions.append(Product.attributes["wash"].astext == filters.wash)
-    if filters.closure and exclude != "closure":
-        conditions.append(Product.attributes["closure"].astext == filters.closure)
-    if filters.stretch is not None:
-        conditions.append(Product.attributes["stretch"].astext == ("true" if filters.stretch else "false"))
+    if filters.q:
+        pattern = f"%{filters.q}%"
+        conditions.append(
+            or_(Product.brand.ilike(pattern), Product.model_name.ilike(pattern), Product.description.ilike(pattern))
+        )
     if filters.sustainability:
         conditions.append(Product.attributes["sustainability"].op("@>")(cast([filters.sustainability], JSONB)))
     if filters.cotton_min is not None:
         conditions.append(cast(Product.attributes["material"]["cotton_pct"].astext, Integer) >= filters.cotton_min)
-    return stmt.where(and_(*conditions))
+    for key, value in filters.attrs.items():
+        if key == exclude:
+            continue
+        conditions.append(Product.attributes[key].astext == value)
+    return stmt.where(and_(*conditions)) if conditions else stmt
 
 
 def _apply_sort(stmt, sort: str):
@@ -171,6 +182,7 @@ def search(
             SearchResultItem(
                 variant_id=variant.id,
                 product_id=product.id,
+                category=product.category,
                 brand=product.brand,
                 model_name=product.model_name,
                 attributes=product.attributes,
@@ -190,23 +202,30 @@ def search(
     return SearchResponse(total=total, page=page, page_size=page_size, results=results)
 
 
-# Multi-valued attributes (e.g. sustainability, a tag list) would need
-# jsonb_array_elements to facet properly and are left out of MVP facets.
-FACET_COLUMNS = {
+FIXED_FACET_COLUMNS = {
+    "category": Product.category,
     "brand": Product.brand,
     "color": Variant.color,
-    "fit": Product.attributes["fit"].astext,
-    "rise": Product.attributes["rise"].astext,
-    "leg_shape": Product.attributes["leg_shape"].astext,
-    "wash": Product.attributes["wash"].astext,
-    "closure": Product.attributes["closure"].astext,
 }
+
+
+def _discover_attribute_keys(session: Session) -> list[str]:
+    """Distinct JSONB attribute keys actually present across all products,
+    minus the non-scalar ones. No per-category registration needed — a new
+    category's extractor output shows up here automatically."""
+    stmt = select(func.jsonb_object_keys(Product.attributes)).distinct()
+    keys = {row[0] for row in session.execute(stmt).all()}
+    return sorted(keys - NON_SCALAR_ATTRS)
 
 
 @router.get("/facets", response_model=FacetsResponse)
 def facets(filters: SearchFilters = Depends(search_filters), session: Session = Depends(get_session)):
+    facet_columns = dict(FIXED_FACET_COLUMNS)
+    for key in _discover_attribute_keys(session):
+        facet_columns[key] = Product.attributes[key].astext
+
     result: dict[str, list[FacetValue]] = {}
-    for name, column in FACET_COLUMNS.items():
+    for name, column in facet_columns.items():
         stmt = select(column.label("value"), func.count(func.distinct(Variant.id)).label("count"))
         stmt = _add_common_joins(stmt)
         stmt = _apply_filters(stmt, filters, exclude=name)

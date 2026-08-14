@@ -1,8 +1,12 @@
 # sizehive
 
 Shopübergreifende Kleidungssuche mit facettierter Filterung nach vielen Attributen
-(Passform, Bundhöhe, Beinform, Waschung, Material, ...) statt nur Größe und Preis.
-MVP-Kategorie: Herrenjeans. Details siehe [`docs/SPEC.md`](docs/SPEC.md).
+(Passform, Bundhöhe, Beinform, Waschung, Material, ...) statt nur Größe und Preis,
+plus Volltextsuche über Marke/Modell/Beschreibung. Ursprüngliche MVP-Kategorie war
+Herrenjeans (siehe [`docs/SPEC.md`](docs/SPEC.md)); mittlerweile auch T-Shirts und
+Sneaker als weitere Kategorien, jede mit eigener Attribut-Taxonomie und eigenem
+Extraktor — siehe [`docs/DECISIONS.md`](docs/DECISIONS.md) für die Architektur, die
+das ohne Schemaänderung ermöglicht.
 
 ## Voraussetzungen
 
@@ -30,6 +34,9 @@ python -m venv .venv
 .venv/Scripts/activate   # Windows; unter Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
 alembic upgrade head
+python -m app.importers.run                      # Beispiel-Feeds laden
+python -m app.extract.run                          # Attribute extrahieren
+python scripts/simulate_price_history.py           # optional: Preisverlauf anreichern
 uvicorn app.main:app --reload --port 8000
 ```
 

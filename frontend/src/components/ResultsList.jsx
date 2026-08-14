@@ -17,6 +17,7 @@ export default function ResultsList({ results, loading }) {
           </Link>
           <div className="result-info">
             <Link to={`/product/${item.variant_id}`} className="result-link">
+              <div className="result-category">{item.category}</div>
               <div className="result-brand">{item.brand}</div>
               <div className="result-name">{item.model_name}</div>
             </Link>

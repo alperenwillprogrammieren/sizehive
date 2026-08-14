@@ -12,6 +12,7 @@ export default function SearchPage() {
   const [searchData, setSearchData] = useState({ total: 0, results: [], page: 1, page_size: 20 });
   const [facetsData, setFacetsData] = useState({ facets: {} });
   const [loading, setLoading] = useState(false);
+  const [qInput, setQInput] = useState(filters.q);
 
   useEffect(() => {
     const searchParams = searchParamsFromFilters(filters, { includePaging: true });
@@ -37,7 +38,16 @@ export default function SearchPage() {
     };
   }, [filters]);
 
-  const updateFilter = useCallback((key, value) => {
+  // Free-text input is debounced locally so every keystroke doesn't fire a request.
+  useEffect(() => setQInput(filters.q), [filters.q]);
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setFilters((prev) => (prev.q === qInput ? prev : { ...prev, q: qInput, page: 1 }));
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [qInput]);
+
+  const updateField = useCallback((key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value, page: 1 }));
   }, []);
 
@@ -49,14 +59,32 @@ export default function SearchPage() {
     });
   }, []);
 
-  const removeFilterValue = useCallback((key, value) => {
+  const updateAttr = useCallback((key, value) => {
     setFilters((prev) => {
-      if (Array.isArray(prev[key])) return { ...prev, [key]: prev[key].filter((v) => v !== value), page: 1 };
-      return { ...prev, [key]: DEFAULT_FILTERS[key], page: 1 };
+      const attrs = { ...prev.attrs };
+      if (value) attrs[key] = value;
+      else delete attrs[key];
+      return { ...prev, attrs, page: 1 };
     });
   }, []);
 
-  const clearAll = useCallback(() => setFilters({ ...DEFAULT_FILTERS }), []);
+  const removeMulti = useCallback((key, value) => {
+    setFilters((prev) => ({ ...prev, [key]: (prev[key] || []).filter((v) => v !== value), page: 1 }));
+  }, []);
+
+  const clearField = useCallback((key) => {
+    setFilters((prev) => ({ ...prev, [key]: DEFAULT_FILTERS[key], page: 1 }));
+  }, []);
+
+  const clearAttr = useCallback((key) => {
+    setFilters((prev) => {
+      const attrs = { ...prev.attrs };
+      delete attrs[key];
+      return { ...prev, attrs, page: 1 };
+    });
+  }, []);
+
+  const clearAll = useCallback(() => setFilters({ ...DEFAULT_FILTERS, attrs: {} }), []);
 
   const setPage = useCallback((page) => setFilters((prev) => ({ ...prev, page })), []);
 
@@ -64,20 +92,36 @@ export default function SearchPage() {
 
   return (
     <>
-      <ActiveFilters filters={filters} onRemove={removeFilterValue} onClearAll={clearAll} />
+      <div className="search-bar">
+        <input
+          type="search"
+          placeholder="Suche nach Marke, Modell, Beschreibung…"
+          value={qInput}
+          onChange={(e) => setQInput(e.target.value)}
+        />
+      </div>
+
+      <ActiveFilters
+        filters={filters}
+        onRemoveMulti={removeMulti}
+        onClearField={clearField}
+        onClearAttr={clearAttr}
+        onClearAll={clearAll}
+      />
 
       <div className="app-body">
         <FacetSidebar
           facets={facetsData.facets}
           filters={filters}
-          onUpdate={updateFilter}
+          onUpdateField={updateField}
           onToggleMulti={toggleMultiFilter}
+          onUpdateAttr={updateAttr}
         />
 
         <main className="results-area">
           <div className="results-toolbar">
             <span>{searchData.total} Treffer</span>
-            <select value={filters.sort} onChange={(e) => updateFilter("sort", e.target.value)}>
+            <select value={filters.sort} onChange={(e) => updateField("sort", e.target.value)}>
               <option value="newest">Neuheit</option>
               <option value="price_asc">Preis aufsteigend</option>
               <option value="price_desc">Preis absteigend</option>

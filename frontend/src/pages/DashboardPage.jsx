@@ -11,7 +11,18 @@ const ATTRIBUTE_LABELS = {
   closure: "Verschluss",
   pockets: "Taschen",
   sustainability: "Nachhaltigkeit",
+  sleeve: "Ärmel",
+  neckline: "Ausschnitt",
+  print: "Print",
+  upper_material: "Obermaterial",
+  sole_type: "Sohle",
+  closure_type: "Verschlussart",
+  style: "Schafthöhe",
 };
+
+function labelFor(key) {
+  return ATTRIBUTE_LABELS[key] || key.replace(/_/g, " ");
+}
 
 export default function DashboardPage() {
   const [data, setData] = useState(null);
@@ -25,22 +36,26 @@ export default function DashboardPage() {
   return (
     <div className="dashboard-page">
       <h1>Attribut-Abdeckung</h1>
-      <p className="tagline">
-        {data.total_products} Produkte insgesamt · {data.products_with_fit_and_wash} (
-        {data.products_with_fit_and_wash_pct.toFixed(1)}%) haben sowohl Passform als auch Waschung
-      </p>
+      <p className="tagline">{data.total_products} Produkte insgesamt, über alle Kategorien</p>
 
-      <div className="coverage-list">
-        {Object.entries(data.coverage).map(([attr, pct]) => (
-          <div className="coverage-row" key={attr}>
-            <span className="coverage-label">{ATTRIBUTE_LABELS[attr] || attr}</span>
-            <div className="coverage-bar-track">
-              <div className="coverage-bar-fill" style={{ width: `${(pct * 100).toFixed(1)}%` }} />
-            </div>
-            <span className="coverage-pct">{(pct * 100).toFixed(1)}%</span>
+      {data.by_category.map((cat) => (
+        <div className="category-coverage" key={cat.category}>
+          <h2 className="section-title">
+            {cat.category} <span className="coverage-note">({cat.total_products} Produkte)</span>
+          </h2>
+          <div className="coverage-list">
+            {Object.entries(cat.coverage).map(([attr, pct]) => (
+              <div className="coverage-row" key={attr}>
+                <span className="coverage-label">{labelFor(attr)}</span>
+                <div className="coverage-bar-track">
+                  <div className="coverage-bar-fill" style={{ width: `${(pct * 100).toFixed(1)}%` }} />
+                </div>
+                <span className="coverage-pct">{(pct * 100).toFixed(1)}%</span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -106,3 +106,49 @@ Stichpunkte zu wesentlichen Entscheidungen aus M0–M7, mit Begründung. Chronol
   In-Place-Migrationsskripte für Bestandsdaten zu schreiben. Vertretbar, weil es sich ausschließlich
   um lokal generierte Beispieldaten handelt — sobald echte Feeds angebunden sind, braucht jede
   weitere Schemaänderung eine echte Migration mit Backfill statt eines Resets.
+
+## Post-MVP-Erweiterung: Volltextsuche + weitere Kategorien
+
+Auf Wunsch nach M7 ergänzt: Volltextsuche (`q`-Parameter) und der Nachweis, dass "neue Kategorie
+ist Konfiguration, keine Schemaänderung" (Spec, MVP-Scope) tatsächlich trägt — zwei weitere
+Kategorien (T-Shirts, Sneaker) mit eigener Attribut-Taxonomie, ohne Migration.
+
+- **Kein Schemawechsel nötig.** `product.category` war schon immer eine freie String-Spalte,
+  `attributes`/`attribute_sources` schon immer JSONB — genau wie im Spec vorgesehen. Die
+  Erweiterung ist ausschließlich neuer Code (Taxonomie-Registry, zwei neue Extraktoren,
+  generalisierte Filter-/Facetten-Logik), keine einzige Alembic-Migration.
+- **Attribut-Filter generisch statt benannt.** Vorher hatte `/api/search` feste, einzeln
+  deklarierte Query-Parameter für jedes Jeans-Attribut (`fit`, `rise`, `wash`, ...). Das hätte für
+  jede neue Kategorie weitere Parameter gebraucht und wäre der eigentlichen Spec-Anforderung
+  "beliebige Attributkombination" nicht gerecht geworden. Jetzt gilt: jeder Query-Parameter, der
+  nicht in einer kleinen reservierten Liste steht, wird generisch als
+  `Product.attributes[<name>].astext == value` ausgewertet. `material` (verschachteltes Objekt)
+  und `sustainability` (Tag-Liste) bleiben bewusst als dedizierte Parameter, weil ihr
+  Vergleich (Zahlenbereich bzw. Containment) sich nicht als flache Gleichheit ausdrücken lässt.
+- **Facetten dynamisch statt statisch.** `/api/facets` ermittelt die verfügbaren Attribut-Facetten
+  per `SELECT DISTINCT jsonb_object_keys(attributes)` statt über eine feste Liste — eine neue
+  Kategorie mit neuen Attributnamen taucht automatisch in den Facetten auf, ohne Codeänderung an
+  dieser Stelle.
+- **Frontend spiegelt dasselbe Prinzip.** `filters.js` behandelt jeden nicht reservierten
+  URL-Parameter generisch als Attribut-Filter (`filters.attrs`); `FacetSidebar` rendert, was die
+  API an Facetten liefert, mit einem Label-Wörterbuch, das für unbekannte Attributnamen auf den
+  Rohschlüssel zurückfällt statt zu crashen. Für 2–3 Kategorien ist ein von Hand gepflegtes
+  Label-Wörterbuch die richtige Grenze — vollautomatische, sprachlich saubere Labels für beliebige
+  zukünftige Attributnamen wären Over-Engineering für diesen Umfang.
+- **"Größe" bleibt jeans-spezifisch.** `size_w`/`size_l` sind nach wie vor W/L-Spalten für Jeans;
+  T-Shirt-Größen (S–XXL) und Schuhgrößen (EU-Zahlen) laufen nur über `size_raw` plus die generische
+  Attribut-Filterung, nicht über eigene Spalten. Der Jeans-Größenparser (M3) markiert sie korrekt
+  als nicht parsebar (geloggt, nicht geraten) — das ist beabsichtigtes Verhalten, kein Bug, und
+  konsistent mit der expliziten Nicht-MVP-Grenze "Größenumrechnung zwischen Systemen".
+- **Produkt-Matching-Bug beim ersten Anlauf:** Die Marken-Alias-Tabelle in
+  `app/normalize/brand.py` ist die gemeinsame Quelle für alle Kategorien (Generator UND Parser
+  nutzen dieselbe Tabelle, siehe M3). Beim Hinzufügen von Sneaker-Marken (Nike, Adidas, ...) zu
+  dieser gemeinsamen Tabelle wählte der Jeans-Template-Generator versehentlich auch aus der vollen
+  Markenliste statt nur aus jeans-passenden Marken — Ergebnis waren "Nike Jeans" in den
+  Testdaten. Behoben durch eine explizite `JEANS_BRANDS`-Teilliste im Generator statt der vollen
+  Tabelle. Zeigt, dass eine geteilte Konfigurationsquelle über Kategorien hinweg zwar Duplikation
+  vermeidet, aber explizite Scoping-Grenzen pro Kategorie braucht, wo die Domänen sich nicht
+  überschneiden.
+- **Preisverlauf-Simulationsskript ist idempotent pro Variante**, nicht nur pro Lauf: beim
+  Reset+Reimport nach der Kategorie-Erweiterung lief es erneut über alle (jetzt 780 statt 660)
+  Varianten und reicherte nur die tatsächlich neuen an.

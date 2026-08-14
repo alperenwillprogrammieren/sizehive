@@ -6,19 +6,18 @@ from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.db.session import SessionLocal
+from app.extract.registry import get_extractor
 from app.extract.report import print_report
-from app.extract.rules import RuleBasedExtractor
 from app.models import Product
 
 
 def run_extraction() -> None:
-    extractor = RuleBasedExtractor()
     session = SessionLocal()
     try:
         products = list(session.scalars(select(Product)))
         for product in products:
             text = f"{product.brand} {product.model_name}. {product.description}"
-            extracted = extractor.extract(text)
+            extracted = get_extractor(product.category).extract(text)
             for attr, result in extracted.items():
                 product.attributes[attr] = result.value
                 product.attribute_sources[attr] = {"source": result.source, "confidence": result.confidence}
