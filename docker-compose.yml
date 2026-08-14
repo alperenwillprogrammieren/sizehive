@@ -7,7 +7,8 @@ services:
       POSTGRES_PASSWORD: sizehive
       POSTGRES_DB: sizehive
     ports:
-      - "5432:5432"
+      # Host port 5432 is often taken by a locally installed PostgreSQL, so use 55432 on the host.
+      - "55432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
