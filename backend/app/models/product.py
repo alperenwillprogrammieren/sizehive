@@ -1,4 +1,4 @@
-from sqlalchemy import Index, String
+from sqlalchemy import Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -13,6 +13,9 @@ class Product(Base):
     model_name: Mapped[str] = mapped_column(String(255))
     category: Mapped[str] = mapped_column(String(60), index=True)
     gender: Mapped[str] = mapped_column(String(20))
+    # Not in the spec's original data-model proposal, added for M4: rule/LLM
+    # attribute extraction needs the feed's free-text description to work on.
+    description: Mapped[str] = mapped_column(Text, default="")
 
     # Facet attributes (fit, rise, wash, material, ...), keyed by attribute name.
     attributes: Mapped[dict] = mapped_column(JSONB, default=dict)

@@ -41,6 +41,7 @@ def find_or_create_product(session: Session, row: dict) -> Product:
             model_name=row["model_name"],
             category=row["category"],
             gender=row["gender"],
+            description=row.get("description", ""),
             attributes={},
             attribute_sources={},
         )
