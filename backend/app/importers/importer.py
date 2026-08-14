@@ -66,6 +66,7 @@ def find_or_create_variant(session: Session, shop: Shop, product: Product, row: 
         size_l=size_l,
         color=normalize_color(row["color"]),
         url=row["deeplink_url"],
+        image_url=row.get("image_url", ""),
     )
     session.add(variant)
     session.flush()

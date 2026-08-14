@@ -1,4 +1,6 @@
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from datetime import datetime
+
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -17,6 +19,13 @@ class Variant(Base):
     size_l: Mapped[int | None] = mapped_column(nullable=True)
     color: Mapped[str] = mapped_column(String(60))
     url: Mapped[str] = mapped_column(String(1000))
+    # Not in the spec's original data-model proposal, added for M5/M6: the
+    # search API and result list need a product image per listing.
+    image_url: Mapped[str] = mapped_column(String(1000), default="")
+    # Added for M5's "Neuheit" (newest) sort.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
 
     product: Mapped["Product"] = relationship(back_populates="variants")
     shop: Mapped["Shop"] = relationship(back_populates="variants")
