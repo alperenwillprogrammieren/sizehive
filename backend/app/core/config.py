@@ -7,5 +7,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://sizehive:sizehive@localhost:55432/sizehive"
     cors_origins: list[str] = ["http://localhost:5173"]
 
+    awin_feed_url: str | None = None
+
 
 settings = Settings()

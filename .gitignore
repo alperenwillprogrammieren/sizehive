@@ -9,6 +9,9 @@ venv/
 # Env
 .env
 
+# Downloaded real feeds (vs. checked-in generated samples in backend/data/samples/)
+backend/data/live/
+
 # Node / frontend
 node_modules/
 frontend/dist/
