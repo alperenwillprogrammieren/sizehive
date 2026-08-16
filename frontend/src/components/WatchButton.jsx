@@ -1,10 +1,11 @@
-import { isWatched, toggleWatch, useWatchlist } from "../collections";
+import { useWatchlist } from "../watchlistContext";
 
 /** Heart toggle. `priceEur` is stored alongside the id so the Merkliste can
- *  later show how the price moved since the item was saved. */
+ *  later show how the price moved since the item was saved. Works the same
+ *  logged in (account) and logged out (localStorage). */
 export default function WatchButton({ variantId, priceEur, className = "" }) {
-  const watchlist = useWatchlist();
-  const watched = isWatched(watchlist, variantId);
+  const { isWatched, toggle } = useWatchlist();
+  const watched = isWatched(variantId);
 
   return (
     <button
@@ -15,7 +16,7 @@ export default function WatchButton({ variantId, priceEur, className = "" }) {
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        toggleWatch(variantId, priceEur);
+        toggle(variantId, priceEur);
       }}
     >
       <span aria-hidden="true">{watched ? "♥" : "♡"}</span>

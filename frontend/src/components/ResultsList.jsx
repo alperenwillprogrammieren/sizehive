@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import ProductImage from "./ProductImage";
 import WatchButton from "./WatchButton";
 
 function formatValue(value) {
@@ -12,7 +13,7 @@ export function ResultCard({ item, children }) {
     <article className="result-card">
       <div className="result-image-wrap">
         <Link to={`/product/${item.variant_id}`}>
-          <img src={item.image_url} alt={`${item.brand} ${item.model_name}`} loading="lazy" />
+          <ProductImage src={item.image_url} alt={`${item.brand} ${item.model_name}`} />
         </Link>
         <WatchButton variantId={item.variant_id} priceEur={item.price_eur} className="watch-button-overlay" />
       </div>

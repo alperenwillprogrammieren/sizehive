@@ -209,3 +209,53 @@ Kategorien (T-Shirts, Sneaker) mit eigener Attribut-Taxonomie, ohne Migration.
   "seit wann nicht günstiger" und tatsächlicher Rabatt bedeuten, sind ohne Datenbank
   unit-testbar (`tests/test_pricing_history.py`) — dieselbe Trennung wie bei den Normalisierern
   und Extraktoren.
+
+## Post-MVP-Erweiterung: Paket 3 (Konten, Preisalarm, Suchagent)
+
+Bewusste Scope-Änderung: `CLAUDE.md` und der Spec führten Nutzerkonten, Wunschlisten und
+Benachrichtigungen als ausdrücklich nicht enthalten. Preisalarm und Suchagent lassen sich ohne
+serverseitige Identität aber grundsätzlich nicht bauen — irgendetwas muss laufen, während der
+Browser zu ist, und wissen, wohin das Ergebnis geht. Alles andere bleibt ohne Konto benutzbar.
+
+- **Passwortlos statt Passwörter.** Login läuft über einen einmalig gültigen Magic-Link. Damit
+  entfallen Passwort-Hashing, Passwort-Reset-Flow und die Haftung für gespeicherte Passwörter
+  komplett — bei einer Anwendung, deren einziger Zweck Benachrichtigungen per Mail sind, ist die
+  Mailadresse ohnehin der Anker.
+- **Nur Hashes in der Datenbank**, für Login-Token und Session gleichermaßen. Ungesalzenes SHA-256
+  ist hier korrekt und *nicht* auf Passwörter übertragbar: Die Token sind 32 Byte aus `secrets`,
+  es gibt kein Wörterbuch anzugreifen und keinen Grund für eine langsame KDF, während der
+  ungesalzene Hash den Lookup ein indizierter Gleichheitsvergleich bleiben lässt.
+- **Cooldown von 60 Sekunden pro Adresse** beim Anfordern eines Login-Links. Ohne das wäre der
+  Endpunkt ein Mail-Bombing-Werkzeug gegen beliebige Dritte. Die Antwort ist immer dieselbe,
+  egal ob Konto neu, bekannt oder gerade gebremst — sonst verrät der Endpunkt, wer ein Konto hat.
+- **Zwei Anti-Spam-Regeln wiegen schwerer als der Auslöser selbst** (`app/notify/rules.py`):
+  Eine Wiederholungsmail setzt einen *echt niedrigeren* Preis als den zuletzt gemeldeten voraus,
+  und ein Alarm ohne Zielpreis feuert nur bei einem Preis, den wir noch nie aufgezeichnet haben.
+  Ohne die erste Regel schickt ein um den Zielpreis pendelnder Preis bei jedem Lauf eine Mail.
+  Beide Regeln sind reine Funktionen und in `tests/test_notify_rules.py` vollständig abgedeckt.
+- **Ein Suchagent ist ein gespeicherter Querystring**, exakt der String aus der Frontend-URL.
+  Damit ist eine gespeicherte Suche (Paket 1) und ein Suchagent dieselbe Sache in zwei
+  Speicherorten, statt zweier paralleler Filterdarstellungen. `filters_from_query_string()`
+  parst ihn ohne HTTP-Request und verwirft unparsebare Einzelwerte, statt den ganzen Lauf
+  abzubrechen — ein Agent kann Monate alt und sein Query von Hand editiert worden sein.
+- **"Neu" heißt `variant.created_at > last_run_at`**, also dieselbe Spalte, auf der schon die
+  "Neuheit"-Sortierung beruht. Ein erneuter Import eines bestehenden Angebots zählt damit nicht
+  als neu (Varianten werden über `shop_id + shop_sku` gematcht, M2). `last_run_at` startet bei
+  der Anlage, damit ein frischer Agent nicht den kompletten Bestand als erste Mail schickt.
+- **Ohne konfiguriertes SMTP wird Mail geloggt statt versendet.** Bewusst kein stiller No-Op:
+  Login-Link und Benachrichtigungstexte landen im Log, damit der komplette Ablauf ohne
+  Mailserver durchspielbar bleibt. Das machte eine zweite Änderung nötig — `app/main.py`
+  konfiguriert jetzt Logging auf INFO. Vorher konfigurierte *nichts* im Projekt Logging, der
+  Root-Logger stand auf WARNING, und die Zeilen verschwanden spurlos (nur `logger.warning` aus
+  dem Größen-Parser war sichtbar, über Pythons Last-Resort-Handler). Damit wäre die Anmeldung in
+  der Entwicklung schlicht unmöglich gewesen.
+- **Merkliste mit zwei austauschbaren Backends.** `watchlist.jsx` bedient dieselbe Schnittstelle
+  aus localStorage (abgemeldet) oder aus dem Konto (angemeldet); `WatchButton` und die
+  Merklisten-Seite wissen nicht, welches aktiv ist. Die Anmeldung übernimmt nichts automatisch —
+  die Seite bietet einen einmaligen Import an. Bereits im Konto liegende Einträge behalten dabei
+  ihren ursprünglichen `price_cents_at_save`: Der Wert ist ein historischer Messwert, ihn zu
+  überschreiben würde den Vergleich "günstiger als beim Merken" verfälschen.
+- **Nebenbei behoben:** Varianten ohne `image_url` (im Feed erlaubt, Spalte hat Default `""`)
+  rendered ein `<img src="">`. Browser interpretieren das als Verweis auf die aktuelle Seite und
+  laden sie als Bild erneut. Die neue Komponente `ProductImage` rendert stattdessen einen
+  Platzhalter.

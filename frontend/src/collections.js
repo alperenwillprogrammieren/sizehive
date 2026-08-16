@@ -19,12 +19,16 @@ function useKey(key, fallback) {
 
 /* ---------------------------------------------------------------- Merkliste */
 
-export function useWatchlist() {
+// The browser-local Merkliste. Since Paket 3 it is only one of two backends:
+// watchlist.jsx picks this one when logged out and the account when logged
+// in. Components go through useWatchlist() there, never through these.
+
+export function useLocalWatchlist() {
   return useKey(WATCHLIST_KEY, []);
 }
 
-export function isWatched(watchlist, variantId) {
-  return watchlist.some((entry) => entry.variant_id === variantId);
+export function readLocalWatchlist() {
+  return readStore(WATCHLIST_KEY, []);
 }
 
 /** Adds or removes; `priceEur` is remembered so the Merkliste can show the

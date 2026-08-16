@@ -1,15 +1,19 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import "./App.css";
-import { useWatchlist } from "./collections";
+import { useAuth } from "./authContext";
 import ThemeToggle from "./components/ThemeToggle";
+import AccountPage from "./pages/AccountPage";
 import SearchPage from "./pages/SearchPage";
 import ProductDetailPage from "./pages/ProductDetailPage";
 import DashboardPage from "./pages/DashboardPage";
 import DealsPage from "./pages/DealsPage";
+import LoginPage from "./pages/LoginPage";
 import WatchlistPage from "./pages/WatchlistPage";
+import { useWatchlist } from "./watchlistContext";
 
 function App() {
-  const watchlist = useWatchlist();
+  const { entries } = useWatchlist();
+  const { user } = useAuth();
 
   return (
     <div className="app">
@@ -26,9 +30,16 @@ function App() {
             <NavLink to="/deals">Deals</NavLink>
             <NavLink to="/merkliste">
               Merkliste
-              {watchlist.length > 0 && <span className="nav-badge">{watchlist.length}</span>}
+              {entries.length > 0 && <span className="nav-badge">{entries.length}</span>}
             </NavLink>
             <NavLink to="/dashboard">Dashboard</NavLink>
+            {user ? (
+              <NavLink to="/konto" title={user.email}>
+                Konto
+              </NavLink>
+            ) : (
+              <NavLink to="/login">Anmelden</NavLink>
+            )}
           </nav>
           <ThemeToggle />
         </div>
@@ -40,6 +51,8 @@ function App() {
         <Route path="/deals" element={<DealsPage />} />
         <Route path="/merkliste" element={<WatchlistPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/konto" element={<AccountPage />} />
       </Routes>
     </div>
   );

@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { clearWatchlist, useWatchlist } from "../collections";
+import { useAuth } from "../authContext";
 import { ResultCard } from "../components/ResultsList";
 import { useVariantsByIds } from "../useVariants";
+import { useWatchlist } from "../watchlistContext";
 
 function formatSavedAt(iso) {
   const date = new Date(iso);
@@ -9,8 +11,8 @@ function formatSavedAt(iso) {
   return date.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-/** Price move since the item was put on the Merkliste. The saved price is the
- *  only thing stored locally besides the id — everything else is live. */
+/** Price move since the item was put on the Merkliste. The saved price is
+ *  a deliberately historical value — everything else is live. */
 function PriceSinceSaved({ savedPrice, currentPrice, savedAt }) {
   const saved = formatSavedAt(savedAt);
   if (typeof savedPrice !== "number") {
@@ -33,12 +35,50 @@ function PriceSinceSaved({ savedPrice, currentPrice, savedAt }) {
   );
 }
 
+/** Offered once after login, when the browser still holds entries that the
+ *  account doesn't have. */
+function ImportBanner() {
+  const { importLocal, localCount, entries } = useWatchlist();
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const serverIds = new Set(entries.map((entry) => entry.variant_id));
+  const pending = localCount > 0 && !result;
+  if (!pending) return result ? <div className="import-banner done">{result} übernommen.</div> : null;
+
+  return (
+    <div className="import-banner">
+      <span>
+        In diesem Browser liegen {localCount} lokal gemerkte Artikel
+        {serverIds.size > 0 ? " (teils schon im Konto)" : ""}.
+      </span>
+      <button
+        type="button"
+        className="chip"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            const outcome = await importLocal();
+            setResult(`${outcome.imported} Artikel`);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        Ins Konto übernehmen
+      </button>
+    </div>
+  );
+}
+
 export default function WatchlistPage() {
-  const watchlist = useWatchlist();
-  const ids = watchlist.map((entry) => entry.variant_id);
+  const { user } = useAuth();
+  const { entries, clear, backend, loading: listLoading } = useWatchlist();
+  const ids = entries.map((entry) => entry.variant_id);
   const { items, loading } = useVariantsByIds(ids);
 
-  const savedById = new Map(watchlist.map((entry) => [entry.variant_id, entry]));
+  const savedById = new Map(entries.map((entry) => [entry.variant_id, entry]));
   const missingCount = !loading && ids.length > items.length ? ids.length - items.length : 0;
 
   return (
@@ -47,23 +87,28 @@ export default function WatchlistPage() {
         <div>
           <h1>Merkliste</h1>
           <p className="tagline">
-            Lokal in diesem Browser gespeichert — kein Konto nötig. Preise werden bei jedem Aufruf frisch geladen.
+            {backend === "server"
+              ? `Im Konto gespeichert (${user.email}) — auf allen Geräten verfügbar.`
+              : "Lokal in diesem Browser gespeichert. Mit einem Konto ist sie geräteübergreifend verfügbar."}{" "}
+            Preise werden bei jedem Aufruf frisch geladen.
           </p>
         </div>
-        {watchlist.length > 0 && (
-          <button type="button" className="text-button" onClick={clearWatchlist}>
+        {entries.length > 0 && (
+          <button type="button" className="text-button" onClick={clear}>
             Merkliste leeren
           </button>
         )}
       </div>
 
-      {watchlist.length === 0 && (
+      {backend === "server" && <ImportBanner />}
+
+      {entries.length === 0 && !listLoading && (
         <div className="status-message">
           Noch nichts gemerkt. Tippe in der <Link to="/">Suche</Link> auf das ♡ an einem Artikel.
         </div>
       )}
 
-      {watchlist.length > 0 && loading && <div className="status-message">Lädt…</div>}
+      {entries.length > 0 && loading && <div className="status-message">Lädt…</div>}
 
       {items.length > 0 && (
         <div className="results-grid">
@@ -74,7 +119,7 @@ export default function WatchlistPage() {
                 <PriceSinceSaved
                   savedPrice={entry?.price_eur_at_save}
                   currentPrice={item.price_eur}
-                  savedAt={entry?.saved_at}
+                  savedAt={entry?.created_at ?? entry?.saved_at}
                 />
               </ResultCard>
             );

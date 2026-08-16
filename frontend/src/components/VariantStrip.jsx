@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useVariantsByIds } from "../useVariants";
+import ProductImage from "./ProductImage";
 
 /** Compact horizontal row of variants — used for "zuletzt angesehen", where
  *  full result cards would dominate the page. */
@@ -21,7 +22,7 @@ export default function VariantStrip({ ids, title, onClear }) {
         {items.map((item) => (
           <li key={item.variant_id}>
             <Link to={`/product/${item.variant_id}`} className="variant-strip-item">
-              <img src={item.image_url} alt={`${item.brand} ${item.model_name}`} loading="lazy" />
+              <ProductImage src={item.image_url} alt={`${item.brand} ${item.model_name}`} />
               <span className="variant-strip-brand">{item.brand}</span>
               <span className="variant-strip-price">{item.price_eur.toFixed(2)} €</span>
             </Link>

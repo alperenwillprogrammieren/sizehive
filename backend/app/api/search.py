@@ -13,6 +13,7 @@ Product.attributes[<param name>] — e.g. `?fit=slim` or `?sleeve=short` or
 app.taxonomy) add filterable attributes without touching this endpoint.
 """
 from dataclasses import dataclass, field
+from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import Integer, and_, cast, func, or_, select
@@ -94,6 +95,47 @@ def search_filters(
         category=category, gender=gender, brand=brand, color=color, size_w=size_w, size_l=size_l,
         price_min=price_min, price_max=price_max, in_stock_only=in_stock_only, q=q,
         cotton_min=cotton_min, sustainability=sustainability, attrs=attrs,
+    )
+
+
+def _coerce(value: str | None, cast):
+    """Stored agent queries are just strings and may be stale or malformed;
+    an unparseable value drops the filter instead of failing the run."""
+    if value is None:
+        return None
+    try:
+        return cast(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def filters_from_query_string(query: str) -> SearchFilters:
+    """Build SearchFilters from a raw querystring, with no HTTP request.
+
+    Search agents (app/notify/run.py) store exactly the querystring the
+    frontend puts in the URL, so they need the same parsing the endpoint
+    does — without going through FastAPI's dependency machinery.
+    """
+    raw = parse_qs(query.lstrip("?"), keep_blank_values=False)
+
+    def first(key: str) -> str | None:
+        values = raw.get(key)
+        return values[0] if values else None
+
+    return SearchFilters(
+        category=raw.get("category"),
+        gender=first("gender"),
+        brand=raw.get("brand"),
+        color=raw.get("color"),
+        size_w=_coerce(first("size_w"), int),
+        size_l=_coerce(first("size_l"), int),
+        price_min=_coerce(first("price_min"), float),
+        price_max=_coerce(first("price_max"), float),
+        in_stock_only=first("in_stock_only") == "true",
+        q=first("q"),
+        cotton_min=_coerce(first("cotton_min"), int),
+        sustainability=first("sustainability"),
+        attrs={key: values[0] for key, values in raw.items() if key not in RESERVED_PARAMS and values},
     )
 
 

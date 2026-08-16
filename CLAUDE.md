@@ -29,8 +29,9 @@ alembic upgrade head                                 # apply migrations
 python -m app.importers.run                          # load backend/data/samples/*.{csv,xml}
 python -m app.extract.run                             # run attribute extraction, print coverage
 python scripts/simulate_price_history.py              # optional: backfill demo price history
+python -m app.notify.run                              # send price alerts + search-agent digests
 uvicorn app.main:app --reload --port 8000              # http://localhost:8000/docs
-python -m pytest tests/                                # unit tests (normalizers, extractors)
+python -m pytest tests/    # unit tests (normalizers, extractors, price stats, alert rules, tokens)
 python scripts/generate_sample_feeds.py                # regenerate backend/data/samples/*
 ```
 
@@ -51,7 +52,9 @@ separate top-level folders. Docker Compose runs Postgres only; both dev servers 
 
 ### Data model
 
-Four tables (`backend/app/models/`):
+Four catalog tables (`backend/app/models/`), plus the account tables in `models/account.py`
+(`app_user`, `login_token`, `user_session`, `watchlist_item`, `price_alert`, `search_agent` —
+see "Accounts" below):
 
 - `shop` — id, name, slug, affiliate_network
 - `product` — id, brand, model_name, category, gender, description, `attributes` (JSONB, GIN
@@ -94,9 +97,37 @@ This is the load-bearing design decision, proven out by three categories today
 extractor class, generate/import some data with that `category` value. No DB migration, no new
 API parameters, no required frontend change (labels are a nice-to-have, not a dependency).
 
-### Client-side state (no accounts)
+### Accounts, alerts and search agents
 
-There is no user table and no auth. Everything user-specific lives in `localStorage` behind
+Accounts exist because price alerts and search agents can't work without server-side identity —
+something has to evaluate them while the browser is closed. Everything else stays usable logged
+out.
+
+- **Passwordless.** `app/auth/tokens.py` (pure, unit-tested) defines token generation, hashing and
+  expiry; `app/auth/service.py` issues the magic link, burns it on use, and mints a session.
+  Neither login tokens nor session tokens are stored in the clear — only SHA-256 hashes. Unsalted
+  is correct here (32 bytes of `secrets`, nothing to brute-force) and keeps lookup an indexed
+  equality; do not copy this for passwords. Sessions ride an httpOnly cookie, so every account
+  call in `frontend/src/api.js` goes through `authed()` with `credentials: "include"`.
+- **`app/notify/run.py`** is the CLI that does the actual work, meant to run after an import:
+  `python -m app.importers.run && python -m app.notify.run`. Idempotent by design.
+- **`app/notify/rules.py`** holds the fire/don't-fire decision as pure functions. Two anti-spam
+  rules matter more than the trigger: a repeat notification needs a *strictly lower* price than
+  the one last reported (`last_notified_price_cents`), and an alert without a target price only
+  fires on a record low. Change these and you change how much mail users get — the tests in
+  `tests/test_notify_rules.py` pin every branch.
+- **A search agent is a stored filter querystring** — the same string the frontend puts in the
+  URL. `filters_from_query_string()` in `app/api/search.py` parses it without an HTTP request, and
+  tolerates junk (a stale or hand-edited query drops the bad filter instead of failing the run).
+  "New" means `variant.created_at > last_run_at`, so a re-import of an existing offer never
+  counts. `last_run_at` starts at creation time — an agent never mails the existing catalog.
+- **Without `smtp_host` configured, mail is logged instead of sent** (`app/notify/mailer.py`), so
+  login and notifications are fully exercisable in dev. `app/main.py` therefore configures logging
+  at INFO — at the default WARNING those lines vanish and dev login becomes impossible.
+
+### Client-side state (works logged out)
+
+Everything user-specific also exists without an account, in `localStorage` behind
 `frontend/src/localStore.js`, a small reactive wrapper (one subscriber set per key, exposed via
 `useSyncExternalStore`, parsed values cached so `getSnapshot` stays referentially stable):
 
@@ -112,6 +143,13 @@ can't show a stale price or a since-deleted article. The one exception is the Me
 `price_eur_at_save`, which is deliberately a historical snapshot: it's what the "günstiger/teurer
 als beim Merken" delta compares against. A gespeicherte Suche stores nothing but the filter
 querystring, because the URL already *is* the complete filter state.
+
+The Merkliste has **two interchangeable backends**: `watchlist.jsx` serves the localStorage list
+when logged out and the account's list when logged in. Components (`WatchButton`,
+`WatchlistPage`) only ever call `useWatchlist()` and don't know which is active. Logging in
+doesn't move anything automatically — the Merkliste page offers a one-way import, and entries
+already on the server keep their original `price_cents_at_save`, since overwriting a historical
+measurement would falsify the delta.
 
 ### Measured vs. claimed discount
 
@@ -170,9 +208,7 @@ migration with backfill, not a reset.
 
 ## Explicitly out of scope
 
-Cross-shop reviews, user accounts and anything that needs server-side identity (the Merkliste and
-gespeicherte Suchen are per-browser `localStorage` only — see "Client-side state" above; price
-alerts and notifications would need real accounts and are not built), size conversion between systems
+Cross-shop reviews, size conversion between systems
 (W32 ↔ 48 ↔ EU36, or between the W/L, S–XXL, and EU-shoe-size systems now all present in the
 catalog). Categories beyond the current three are addable per the pattern above but each still
 needs a hand-written extractor — there's no zero-effort "any category" support, despite filtering

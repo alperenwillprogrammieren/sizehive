@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { fetchVariantDetail } from "../api";
 import { recordView } from "../collections";
+import PriceAlertBox from "../components/PriceAlertBox";
 import PriceChart from "../components/PriceChart";
 import PriceVerdict from "../components/PriceVerdict";
+import ProductImage from "../components/ProductImage";
 import WatchButton from "../components/WatchButton";
 
 function formatValue(value) {
@@ -83,7 +85,12 @@ export default function ProductDetailPage() {
       </Link>
 
       <div className="detail-layout">
-        <img className="detail-image" src={detail.image_url} alt={`${detail.brand} ${detail.model_name}`} />
+        <ProductImage
+          className="detail-image"
+          src={detail.image_url}
+          alt={`${detail.brand} ${detail.model_name}`}
+          loading="eager"
+        />
 
         <div className="detail-info">
           <div className="result-category">{detail.category}</div>
@@ -118,6 +125,8 @@ export default function ProductDetailPage() {
           <a className="shop-link" href={detail.url} target="_blank" rel="noopener noreferrer">
             Zum Shop ↗
           </a>
+
+          <PriceAlertBox variantId={detail.variant_id} currentPrice={detail.current_price_eur} />
 
           <h2 className="section-title">Attribute</h2>
           <div className="attr-grid">

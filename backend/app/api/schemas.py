@@ -127,6 +127,76 @@ class ShopTrustResponse(BaseModel):
     shops: list[ShopTrust]
 
 
+class LoginRequest(BaseModel):
+    email: str
+
+
+class VerifyRequest(BaseModel):
+    token: str
+
+
+class UserResponse(BaseModel):
+    email: str
+    created_at: datetime
+
+
+class WatchlistEntryIn(BaseModel):
+    variant_id: int
+    price_eur_at_save: float | None = None
+
+
+class WatchlistImportRequest(BaseModel):
+    items: list[WatchlistEntryIn]
+
+
+class WatchlistEntry(BaseModel):
+    variant_id: int
+    price_eur_at_save: float | None
+    created_at: datetime
+
+
+class WatchlistResponse(BaseModel):
+    items: list[WatchlistEntry]
+
+
+class PriceAlertIn(BaseModel):
+    variant_id: int
+    #: None means "notify at any price we have never recorded before".
+    target_price_eur: float | None = None
+
+
+class PriceAlertOut(BaseModel):
+    id: int
+    variant_id: int
+    target_price_eur: float | None
+    active: bool
+    created_at: datetime
+    last_notified_at: datetime | None
+
+
+class PriceAlertsResponse(BaseModel):
+    alerts: list[PriceAlertOut]
+
+
+class SearchAgentIn(BaseModel):
+    name: str
+    #: The filter querystring, exactly as it appears in the frontend URL.
+    query: str
+
+
+class SearchAgentOut(BaseModel):
+    id: int
+    name: str
+    query: str
+    active: bool
+    created_at: datetime
+    last_run_at: datetime | None
+
+
+class SearchAgentsResponse(BaseModel):
+    agents: list[SearchAgentOut]
+
+
 class CategoryCoverage(BaseModel):
     category: str
     total_products: int
