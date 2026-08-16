@@ -97,6 +97,41 @@ This is the load-bearing design decision, proven out by three categories today
 extractor class, generate/import some data with that `category` value. No DB migration, no new
 API parameters, no required frontend change (labels are a nice-to-have, not a dependency).
 
+### Search: typo tolerance, autocomplete, similar articles
+
+- **Typo tolerance is a fallback, not a mode.** The strict `ILIKE '%…%'` runs first; only when
+  it returns zero does the query re-run against pg_trgm's `word_similarity` at
+  `FUZZY_THRESHOLD`. That keeps the common case exact, and makes the generous threshold
+  correct — the alternative to a fuzzy hit is an empty page. `resolve_fuzzy()` is called by
+  **both** `/search` and `/facets`, so the sidebar can't describe a different result set than
+  the one on screen. The response's `fuzzy` flag is what the UI uses to say so out loud.
+- `/api/suggest` has no such fallback — it ORs substring and similarity in one pass, because a
+  suggestion list that silently stays empty on a typo is the exact case autocomplete exists for.
+- `/api/variants/{id}/similar` ranks by **attribute overlap first, price proximity second**
+  (`app/recommend.py`, pure + unit-tested). Same category only — attribute vocabularies don't
+  overlap across categories, so an identical price must not imply similarity. Candidates are
+  pre-selected in SQL by price proximity and capped before Python scores them.
+- The trigram indexes live in the `7c1e4f3a9b02` migration. `CREATE EXTENSION pg_trgm` needs
+  privileges the app user may not have in a managed database — that's a deploy prerequisite,
+  not something the app does at runtime.
+
+### Dashboard charts
+
+`frontend/src/components/{BoxPlotChart,DivergingBars,ChartFrame}.jsx`, hand-rolled inline SVG
+(no chart library, consistent with `PriceChart`). Two rules drive the encoding and shouldn't be
+"improved" without reason:
+
+- **Nominal groups get one hue.** Brands and categories have no natural order, so every box wears
+  `--viz-series-1`. Colouring them by value would re-encode what the box position already shows.
+  One series ⇒ no legend; the title names what's plotted.
+- **Deviation from a baseline gets the diverging pair** (`--viz-pos` / `--viz-neg` with
+  `--viz-mid` as the neutral zero) — not the status palette: "costs more" isn't "bad".
+
+The viz tokens in `index.css` are validated per mode against `--surface` (lightness band, chroma
+floor, CVD separation, normal-vision floor, 3:1 contrast); the dark values are their own selected
+steps, not a flip. Every chart ships a **table twin** via `ChartFrame` — tooltips enhance, they
+never gate a value — and the filter row sits above the charts it scopes, never inside a card.
+
 ### Accounts, alerts and search agents
 
 Accounts exist because price alerts and search agents can't work without server-side identity —

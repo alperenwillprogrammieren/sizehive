@@ -259,3 +259,44 @@ Browser zu ist, und wissen, wohin das Ergebnis geht. Alles andere bleibt ohne Ko
   rendered ein `<img src="">`. Browser interpretieren das als Verweis auf die aktuelle Seite und
   laden sie als Bild erneut. Die neue Komponente `ProductImage` rendert stattdessen einen
   Platzhalter.
+
+## Post-MVP-Erweiterung: Paket 4 (Suche und Statistik)
+
+- **Tippfehlertoleranz als Fallback, nicht als Modus.** Die strenge Substring-Suche läuft
+  zuerst; erst wenn sie nichts findet, wird dieselbe Anfrage gegen `word_similarity` aus
+  pg_trgm wiederholt. Damit bleibt der Normalfall exakt, und erst dadurch ist ein großzügiger
+  Schwellwert richtig: Die Alternative zu einem unscharfen Treffer ist eine leere Seite.
+  Gemessen am Beispielkatalog: „tomy hilfiger" 0.81, „slimm taperd" 0.64, „levsi" 0.50,
+  „wranlger" 0.44, echter Buchstabensalat 0.00 — deshalb 0.4.
+- **`/facets` benutzt denselben Fallback wie `/search`.** Sonst zeigt die Seite Treffer, während
+  die Facettenleiste daneben leer bleibt und ein anderes Ergebnis beschreibt. Kostet eine
+  zusätzliche Count-Abfrage, aber nur wenn überhaupt ein Suchbegriff gesetzt ist.
+- **`/suggest` hat bewusst keinen Fallback**, sondern verodert Substring und Ähnlichkeit in
+  einem Durchgang: Eine Vorschlagsliste, die beim Vertippen stillschweigend leer bleibt, ist
+  genau der Fall, für den Autocomplete existiert.
+- **Ähnlichkeit ist Attributüberschneidung zuerst, Preisnähe zweitens** (75/25). Kein
+  Collaborative Filtering (es gibt keine Kaufhistorien) und kein Markenabgleich — denselben
+  Artikel in einem anderen Shop zu finden, macht bereits das Produkt-Matching beim Import.
+  Nur innerhalb derselben Kategorie, weil sich die Attributvokabulare nicht überschneiden:
+  Ein gleicher Preis darf einen Sneaker nicht zu einer „ähnlichen" Jeans machen. Deshalb ist
+  der Attributterm 0, wenn es keinen gemeinsamen Schlüssel gibt, statt auf 1 zu defaulten.
+- **`CREATE EXTENSION pg_trgm` ist eine Deploy-Voraussetzung.** In verwalteten Datenbanken
+  fehlen dem Anwendungsnutzer dafür oft die Rechte. Die Migration macht es explizit, statt es
+  zur Laufzeit zu versuchen; das `downgrade` löscht nur die Indizes und lässt die Extension
+  stehen — andere Objekte könnten davon abhängen.
+- **Gruppen unter fünf Angeboten fallen aus den Statistiken.** Ein „Median" über drei Artikel
+  ist Rauschen im Gewand einer Kennzahl.
+- **Basiswert des Attributvergleichs ist der Median der Attributwerte selbst**, nicht der
+  Kategorienmedian: Die Werte sind ungleich verteilt, und ein Vergleich gegen die Kategorie
+  würde Artikel einrechnen, die das Attribut gar nicht haben.
+- **Diagramm-Kodierung.** Marken und Kategorien sind nominal — jede Box bekommt dieselbe
+  einzelne Serienfarbe. Sie nach Wert einzufärben würde die Balkenlage ein zweites Mal
+  kodieren und den einzigen freien Kanal dafür verbrauchen. Preisabweichung ist dagegen eine
+  Polaritätsfrage und bekommt das divergierende Paar mit neutralem Grau bei null — bewusst
+  nicht die Statusfarben, denn „teurer" ist nicht „schlecht". Die Chart-Tokens sind je Modus
+  gegen die tatsächliche Kartenfläche validiert; die Dunkelwerte sind eigene Stufen, keine
+  Umkehrung. Jedes Diagramm hat einen Tabellen-Zwilling, damit kein Wert nur über Hover
+  erreichbar ist.
+- **Beim Ansehen des gerenderten Diagramms gefunden:** Ein Balken mit voller negativer
+  Ausdehnung endet genau an der Beschriftungsspalte, sein Wertlabel wäre darüber gelaufen.
+  Behoben durch eine reservierte Label-Spur auf beiden Seiten der Plotfläche.

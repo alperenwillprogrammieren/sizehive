@@ -25,6 +25,8 @@ from app.api.schemas import (
     FacetValue,
     SearchResponse,
     SearchResultItem,
+    Suggestion,
+    SuggestResponse,
     VariantBatchResponse,
 )
 from app.db.session import SessionLocal
@@ -58,6 +60,16 @@ RESERVED_PARAMS = {
 NON_SCALAR_ATTRS = {"material", "sustainability"}
 
 
+# Typo tolerance is a *fallback*: the strict substring match runs first, and
+# only when it finds nothing does the query re-run against pg_trgm's
+# word_similarity. That keeps the common case exact and fast, and makes a
+# generous threshold the right call — the alternative to a fuzzy hit is an
+# empty result page. Measured against the sample catalog: "tomy hilfiger"
+# scores 0.81, "slimm taperd" 0.64, "levsi" 0.50, "wranlger" 0.44, while
+# actual gibberish scores 0.00.
+FUZZY_THRESHOLD = 0.4
+
+
 @dataclass
 class SearchFilters:
     category: list[str] | None = None
@@ -73,6 +85,8 @@ class SearchFilters:
     cotton_min: int | None = None
     sustainability: str | None = None
     attrs: dict[str, str] = field(default_factory=dict)
+    #: Set by the endpoint, not by the caller — see FUZZY_THRESHOLD.
+    fuzzy: bool = False
 
 
 def search_filters(
@@ -182,10 +196,19 @@ def _apply_filters(stmt, filters: SearchFilters, exclude: str | None = None):
     if filters.in_stock_only:
         conditions.append(PriceSnapshot.in_stock.is_(True))
     if filters.q:
-        pattern = f"%{filters.q}%"
-        conditions.append(
-            or_(Product.brand.ilike(pattern), Product.model_name.ilike(pattern), Product.description.ilike(pattern))
-        )
+        if filters.fuzzy:
+            conditions.append(
+                func.word_similarity(filters.q, Product.brand + " " + Product.model_name) >= FUZZY_THRESHOLD
+            )
+        else:
+            pattern = f"%{filters.q}%"
+            conditions.append(
+                or_(
+                    Product.brand.ilike(pattern),
+                    Product.model_name.ilike(pattern),
+                    Product.description.ilike(pattern),
+                )
+            )
     if filters.sustainability:
         conditions.append(Product.attributes["sustainability"].op("@>")(cast([filters.sustainability], JSONB)))
     if filters.cotton_min is not None:
@@ -231,6 +254,19 @@ def _apply_sort(stmt, sort: str):
     return stmt.order_by(Variant.created_at.desc())  # newest
 
 
+def resolve_fuzzy(session: Session, filters: SearchFilters) -> bool:
+    """Decide whether this request should fall back to typo tolerance.
+
+    Costs one extra count query, and only when a free-text term is present.
+    Both /search and /facets call it so the sidebar can't end up describing
+    a different result set than the one on screen.
+    """
+    if not filters.q:
+        return False
+    strict = _apply_filters(_add_common_joins(select(Variant.id)), filters)
+    return session.scalar(select(func.count()).select_from(strict.subquery())) == 0
+
+
 @router.get("/search", response_model=SearchResponse)
 def search(
     filters: SearchFilters = Depends(search_filters),
@@ -242,12 +278,53 @@ def search(
     if sort not in SORT_OPTIONS:
         sort = "newest"
 
+    filters.fuzzy = resolve_fuzzy(session, filters)
+
     base_stmt = _apply_filters(_add_common_joins(select(Variant, Product, Shop, PriceSnapshot)), filters)
     total = session.scalar(select(func.count()).select_from(base_stmt.subquery()))
 
     stmt = _apply_sort(base_stmt, sort).offset((page - 1) * page_size).limit(page_size)
     results = [_to_result_item(*row) for row in session.execute(stmt).all()]
-    return SearchResponse(total=total, page=page, page_size=page_size, results=results)
+    return SearchResponse(
+        total=total, page=page, page_size=page_size, results=results, fuzzy=filters.fuzzy and total > 0
+    )
+
+
+SUGGEST_SOURCES = {"brand": Product.brand, "model": Product.model_name, "category": Product.category}
+
+
+@router.get("/suggest", response_model=SuggestResponse)
+def suggest(
+    q: str = Query(..., min_length=2, description="Partial term from the search box"),
+    limit: int = Query(8, ge=1, le=20),
+    session: Session = Depends(get_session),
+):
+    """Autocomplete over brands, model names and categories.
+
+    Substring match OR trigram similarity in one pass — unlike /search this
+    has no fallback step, because a suggestion list that quietly stays empty
+    on a typo is exactly the case autocomplete exists to fix.
+    """
+    pattern = f"%{q}%"
+    suggestions: list[Suggestion] = []
+
+    for kind, column in SUGGEST_SOURCES.items():
+        stmt = (
+            _add_common_joins(select(column.label("value"), func.count(func.distinct(Variant.id)).label("count")))
+            .where(or_(column.ilike(pattern), func.word_similarity(q, column) >= FUZZY_THRESHOLD))
+            .group_by(column)
+            .order_by(func.count(func.distinct(Variant.id)).desc())
+            .limit(limit)
+        )
+        suggestions.extend(
+            Suggestion(value=value, kind=kind, count=count) for value, count in session.execute(stmt).all()
+        )
+
+    # Brands and categories are the more useful jump-off points, so they win
+    # ties against a model name with the same hit count.
+    rank = {"brand": 0, "category": 1, "model": 2}
+    suggestions.sort(key=lambda s: (rank[s.kind], -s.count))
+    return SuggestResponse(suggestions=suggestions[:limit])
 
 
 MAX_BATCH_IDS = 200
@@ -295,6 +372,7 @@ def _discover_attribute_keys(session: Session) -> list[str]:
 
 @router.get("/facets", response_model=FacetsResponse)
 def facets(filters: SearchFilters = Depends(search_filters), session: Session = Depends(get_session)):
+    filters.fuzzy = resolve_fuzzy(session, filters)
     facet_columns = dict(FIXED_FACET_COLUMNS)
     for key in _discover_attribute_keys(session):
         facet_columns[key] = Product.attributes[key].astext

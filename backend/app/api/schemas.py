@@ -27,7 +27,31 @@ class SearchResponse(BaseModel):
     total: int
     page: int
     page_size: int
+    #: True when the exact term found nothing and these are typo-tolerant hits.
+    fuzzy: bool = False
     results: list[SearchResultItem]
+
+
+class Suggestion(BaseModel):
+    value: str
+    #: "brand" | "model" | "category"
+    kind: str
+    count: int
+
+
+class SuggestResponse(BaseModel):
+    suggestions: list[Suggestion]
+
+
+class SimilarItem(SearchResultItem):
+    similarity: float
+    #: Attribute keys whose value matches the article being viewed — the
+    #: reason this item is shown at all.
+    shared_attributes: list[str]
+
+
+class SimilarResponse(BaseModel):
+    results: list[SimilarItem]
 
 
 class VariantBatchResponse(BaseModel):
@@ -206,3 +230,38 @@ class CategoryCoverage(BaseModel):
 class DashboardResponse(BaseModel):
     total_products: int
     by_category: list[CategoryCoverage]
+
+
+class PriceDistributionGroup(BaseModel):
+    group: str
+    count: int
+    min_eur: float
+    p25_eur: float
+    median_eur: float
+    p75_eur: float
+    max_eur: float
+
+
+class PriceDistributionResponse(BaseModel):
+    dimension: str
+    groups: list[PriceDistributionGroup]
+
+
+class AttributeValuePrice(BaseModel):
+    value: str
+    count: int
+    median_eur: float
+    #: Median of this value against the median across the whole attribute,
+    #: in percent. Positive means this value sells dearer.
+    delta_pct: float
+
+
+class AttributePrices(BaseModel):
+    attribute: str
+    median_eur: float
+    values: list[AttributeValuePrice]
+
+
+class AttributePricesResponse(BaseModel):
+    category: str
+    attributes: list[AttributePrices]

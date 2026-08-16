@@ -85,6 +85,30 @@ export async function fetchShopTrust() {
   return res.json();
 }
 
+export async function fetchSuggestions(q) {
+  const res = await fetch(`${API_BASE}/suggest?q=${encodeURIComponent(q)}`);
+  if (!res.ok) throw new Error(`suggest failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchSimilar(variantId, limit = 6) {
+  const res = await fetch(`${API_BASE}/variants/${variantId}/similar?limit=${limit}`);
+  if (!res.ok) throw new Error(`similar failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchPriceDistribution(dimension) {
+  const res = await fetch(`${API_BASE}/dashboard/price-distribution?dimension=${dimension}`);
+  if (!res.ok) throw new Error(`price distribution failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchAttributePrices(category) {
+  const res = await fetch(`${API_BASE}/dashboard/attribute-prices?category=${encodeURIComponent(category)}`);
+  if (!res.ok) throw new Error(`attribute prices failed: ${res.status}`);
+  return res.json();
+}
+
 export async function fetchDashboardCoverage() {
   const res = await fetch(`${API_BASE}/dashboard/coverage`);
   if (!res.ok) throw new Error(`dashboard coverage failed: ${res.status}`);

@@ -6,6 +6,7 @@ import FacetSidebar from "../components/FacetSidebar";
 import ActiveFilters from "../components/ActiveFilters";
 import ResultsList from "../components/ResultsList";
 import SavedSearches from "../components/SavedSearches";
+import SearchSuggest from "../components/SearchSuggest";
 import VariantStrip from "../components/VariantStrip";
 
 export default function SearchPage() {
@@ -102,14 +103,11 @@ export default function SearchPage() {
 
   return (
     <>
-      <div className="search-bar">
-        <input
-          type="search"
-          placeholder="Suche nach Marke, Modell, Beschreibung…"
-          value={qInput}
-          onChange={(e) => setQInput(e.target.value)}
-        />
-      </div>
+      <SearchSuggest
+        value={qInput}
+        onChange={setQInput}
+        onSubmit={(term) => setFilters((prev) => ({ ...prev, q: term, page: 1 }))}
+      />
 
       <ActiveFilters
         filters={filters}
@@ -132,7 +130,15 @@ export default function SearchPage() {
 
         <main className="results-area">
           <div className="results-toolbar">
-            <span>{searchData.total} Treffer</span>
+            <span>
+              {searchData.total} Treffer
+              {searchData.fuzzy && (
+                <span className="fuzzy-note">
+                  {" "}
+                  — keine exakten Treffer für „{filters.q}", daher ähnliche Schreibweisen
+                </span>
+              )}
+            </span>
             <select value={filters.sort} onChange={(e) => updateField("sort", e.target.value)}>
               <option value="newest">Neuheit</option>
               <option value="price_asc">Preis aufsteigend</option>

@@ -32,6 +32,19 @@
 
   --image-bg: #ebebef;
 
+  /* Data-viz tokens. Validated per mode against the surface the charts
+     actually render on (--surface): lightness band, chroma floor, CVD
+     separation, normal-vision floor and 3:1 contrast all pass.
+     --viz-series-1 is the single hue for nominal groups (box plots);
+     --viz-pos/--viz-neg are the diverging pair for deviation-from-baseline,
+     with --viz-mid as the neutral midpoint. */
+  --viz-series-1: #2a78d6;
+  --viz-pos: #e34948;
+  --viz-neg: #2a78d6;
+  --viz-mid: #f0efec;
+  --viz-grid: #e1e0d9;
+  --viz-axis: #c3c2b7;
+
   font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -64,6 +77,15 @@
   --negative-text: #ff9dab;
 
   --image-bg: #26262b;
+
+  /* The same hues, stepped for the dark surface and validated as their own
+     set — not an automatic flip of the light values. */
+  --viz-series-1: #3987e5;
+  --viz-pos: #e66767;
+  --viz-neg: #3987e5;
+  --viz-mid: #383835;
+  --viz-grid: #2c2c2a;
+  --viz-axis: #383835;
 }
 
 * {

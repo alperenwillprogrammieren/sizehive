@@ -6,6 +6,7 @@ import PriceAlertBox from "../components/PriceAlertBox";
 import PriceChart from "../components/PriceChart";
 import PriceVerdict from "../components/PriceVerdict";
 import ProductImage from "../components/ProductImage";
+import SimilarProducts from "../components/SimilarProducts";
 import WatchButton from "../components/WatchButton";
 
 function formatValue(value) {
@@ -149,6 +150,8 @@ export default function ProductDetailPage() {
 
       <h2 className="section-title">Preisverlauf</h2>
       <PriceChart points={detail.price_history} />
+
+      <SimilarProducts variantId={detail.variant_id} />
     </div>
   );
 }
