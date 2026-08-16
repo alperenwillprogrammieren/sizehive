@@ -1,8 +1,91 @@
+/* Design tokens. Every color in App.css goes through one of these, so the
+   dark palette is a single block override rather than a parallel stylesheet.
+   theme.js resolves "system" to a concrete value and stamps data-theme on
+   <html> before first paint — the CSS never needs prefers-color-scheme. */
+
 :root {
   color-scheme: light;
+
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --surface-muted: #f0f0f3;
+  --border: #e4e4e8;
+  --border-strong: #d0d0d5;
+
+  --text: #1c1c1e;
+  --text-secondary: #3a3a3c;
+  --text-muted: #6b6b70;
+  --text-faint: #9a9aa0;
+
+  /* Inverted pair for "selected" surfaces (active facet, coverage bar). */
+  --invert-bg: #1c1c1e;
+  --invert-text: #ffffff;
+  --invert-text-muted: #c7c7cc;
+
+  --accent: #0066cc;
+  --danger: #d0263d;
+
+  --positive-bg: #eef7ee;
+  --positive-text: #1e6b1e;
+  --negative-bg: #fdecec;
+  --negative-text: #a3172c;
+
+  --image-bg: #ebebef;
+
+  /* Data-viz tokens. Validated per mode against the surface the charts
+     actually render on (--surface): lightness band, chroma floor, CVD
+     separation, normal-vision floor and 3:1 contrast all pass.
+     --viz-series-1 is the single hue for nominal groups (box plots);
+     --viz-pos/--viz-neg are the diverging pair for deviation-from-baseline,
+     with --viz-mid as the neutral midpoint. */
+  --viz-series-1: #2a78d6;
+  --viz-pos: #e34948;
+  --viz-neg: #2a78d6;
+  --viz-mid: #f0efec;
+  --viz-grid: #e1e0d9;
+  --viz-axis: #c3c2b7;
+
   font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #101013;
+  --surface: #1a1a1e;
+  --surface-muted: #26262b;
+  --border: #2d2d33;
+  --border-strong: #3d3d45;
+
+  --text: #f2f2f5;
+  --text-secondary: #cfcfd6;
+  --text-muted: #9c9ca6;
+  --text-faint: #74747e;
+
+  --invert-bg: #f2f2f5;
+  --invert-text: #16161a;
+  --invert-text-muted: #5c5c66;
+
+  --accent: #64a8ff;
+  --danger: #ff7183;
+
+  --positive-bg: #16301b;
+  --positive-text: #86d691;
+  --negative-bg: #3a1620;
+  --negative-text: #ff9dab;
+
+  --image-bg: #26262b;
+
+  /* The same hues, stepped for the dark surface and validated as their own
+     set — not an automatic flip of the light values. */
+  --viz-series-1: #3987e5;
+  --viz-pos: #e66767;
+  --viz-neg: #3987e5;
+  --viz-mid: #383835;
+  --viz-grid: #2c2c2a;
+  --viz-axis: #383835;
 }
 
 * {
@@ -15,4 +98,17 @@ body {
 
 #root {
   min-height: 100svh;
+}
+
+/* Visually hidden but readable by screen readers. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

@@ -29,8 +29,9 @@ alembic upgrade head                                 # apply migrations
 python -m app.importers.run                          # load backend/data/samples/*.{csv,xml}
 python -m app.extract.run                             # run attribute extraction, print coverage
 python scripts/simulate_price_history.py              # optional: backfill demo price history
+python -m app.notify.run                              # send price alerts + search-agent digests
 uvicorn app.main:app --reload --port 8000              # http://localhost:8000/docs
-python -m pytest tests/                                # unit tests (normalizers, extractors)
+python -m pytest tests/    # unit tests (normalizers, extractors, price stats, alert rules, tokens)
 python scripts/generate_sample_feeds.py                # regenerate backend/data/samples/*
 ```
 
@@ -51,7 +52,9 @@ separate top-level folders. Docker Compose runs Postgres only; both dev servers 
 
 ### Data model
 
-Four tables (`backend/app/models/`):
+Four catalog tables (`backend/app/models/`), plus the account tables in `models/account.py`
+(`app_user`, `login_token`, `user_session`, `watchlist_item`, `price_alert`, `search_agent` —
+see "Accounts" below):
 
 - `shop` — id, name, slug, affiliate_network
 - `product` — id, brand, model_name, category, gender, description, `attributes` (JSONB, GIN
@@ -94,6 +97,114 @@ This is the load-bearing design decision, proven out by three categories today
 extractor class, generate/import some data with that `category` value. No DB migration, no new
 API parameters, no required frontend change (labels are a nice-to-have, not a dependency).
 
+### Search: typo tolerance, autocomplete, similar articles
+
+- **Typo tolerance is a fallback, not a mode.** The strict `ILIKE '%…%'` runs first; only when
+  it returns zero does the query re-run against pg_trgm's `word_similarity` at
+  `FUZZY_THRESHOLD`. That keeps the common case exact, and makes the generous threshold
+  correct — the alternative to a fuzzy hit is an empty page. `resolve_fuzzy()` is called by
+  **both** `/search` and `/facets`, so the sidebar can't describe a different result set than
+  the one on screen. The response's `fuzzy` flag is what the UI uses to say so out loud.
+- `/api/suggest` has no such fallback — it ORs substring and similarity in one pass, because a
+  suggestion list that silently stays empty on a typo is the exact case autocomplete exists for.
+- `/api/variants/{id}/similar` ranks by **attribute overlap first, price proximity second**
+  (`app/recommend.py`, pure + unit-tested). Same category only — attribute vocabularies don't
+  overlap across categories, so an identical price must not imply similarity. Candidates are
+  pre-selected in SQL by price proximity and capped before Python scores them.
+- The trigram indexes live in the `7c1e4f3a9b02` migration. `CREATE EXTENSION pg_trgm` needs
+  privileges the app user may not have in a managed database — that's a deploy prerequisite,
+  not something the app does at runtime.
+
+### Dashboard charts
+
+`frontend/src/components/{BoxPlotChart,DivergingBars,ChartFrame}.jsx`, hand-rolled inline SVG
+(no chart library, consistent with `PriceChart`). Two rules drive the encoding and shouldn't be
+"improved" without reason:
+
+- **Nominal groups get one hue.** Brands and categories have no natural order, so every box wears
+  `--viz-series-1`. Colouring them by value would re-encode what the box position already shows.
+  One series ⇒ no legend; the title names what's plotted.
+- **Deviation from a baseline gets the diverging pair** (`--viz-pos` / `--viz-neg` with
+  `--viz-mid` as the neutral zero) — not the status palette: "costs more" isn't "bad".
+
+The viz tokens in `index.css` are validated per mode against `--surface` (lightness band, chroma
+floor, CVD separation, normal-vision floor, 3:1 contrast); the dark values are their own selected
+steps, not a flip. Every chart ships a **table twin** via `ChartFrame` — tooltips enhance, they
+never gate a value — and the filter row sits above the charts it scopes, never inside a card.
+
+### Accounts, alerts and search agents
+
+Accounts exist because price alerts and search agents can't work without server-side identity —
+something has to evaluate them while the browser is closed. Everything else stays usable logged
+out.
+
+- **Passwordless.** `app/auth/tokens.py` (pure, unit-tested) defines token generation, hashing and
+  expiry; `app/auth/service.py` issues the magic link, burns it on use, and mints a session.
+  Neither login tokens nor session tokens are stored in the clear — only SHA-256 hashes. Unsalted
+  is correct here (32 bytes of `secrets`, nothing to brute-force) and keeps lookup an indexed
+  equality; do not copy this for passwords. Sessions ride an httpOnly cookie, so every account
+  call in `frontend/src/api.js` goes through `authed()` with `credentials: "include"`.
+- **`app/notify/run.py`** is the CLI that does the actual work, meant to run after an import:
+  `python -m app.importers.run && python -m app.notify.run`. Idempotent by design.
+- **`app/notify/rules.py`** holds the fire/don't-fire decision as pure functions. Two anti-spam
+  rules matter more than the trigger: a repeat notification needs a *strictly lower* price than
+  the one last reported (`last_notified_price_cents`), and an alert without a target price only
+  fires on a record low. Change these and you change how much mail users get — the tests in
+  `tests/test_notify_rules.py` pin every branch.
+- **A search agent is a stored filter querystring** — the same string the frontend puts in the
+  URL. `filters_from_query_string()` in `app/api/search.py` parses it without an HTTP request, and
+  tolerates junk (a stale or hand-edited query drops the bad filter instead of failing the run).
+  "New" means `variant.created_at > last_run_at`, so a re-import of an existing offer never
+  counts. `last_run_at` starts at creation time — an agent never mails the existing catalog.
+- **Without `smtp_host` configured, mail is logged instead of sent** (`app/notify/mailer.py`), so
+  login and notifications are fully exercisable in dev. `app/main.py` therefore configures logging
+  at INFO — at the default WARNING those lines vanish and dev login becomes impossible.
+
+### Client-side state (works logged out)
+
+Everything user-specific also exists without an account, in `localStorage` behind
+`frontend/src/localStore.js`, a small reactive wrapper (one subscriber set per key, exposed via
+`useSyncExternalStore`, parsed values cached so `getSnapshot` stays referentially stable):
+
+- `frontend/src/collections.js` — Merkliste, gespeicherte Suchen, zuletzt angesehen.
+- `frontend/src/theme.js` — `system`/`light`/`dark`. "system" is resolved in JS and stamped as
+  `data-theme` on `<html>` before first paint (`initTheme()` in `main.jsx`), so the CSS only ever
+  needs `:root` and `:root[data-theme="dark"]` — no `prefers-color-scheme` in the stylesheet — and
+  a dark reload never flashes light. All colors go through the tokens in `index.css`.
+
+**These collections store variant ids only** — never a copy of the product. The live data is
+re-fetched from `GET /api/variants?ids=1,2,3` (`useVariants.js`) on every view, so a saved entry
+can't show a stale price or a since-deleted article. The one exception is the Merkliste's
+`price_eur_at_save`, which is deliberately a historical snapshot: it's what the "günstiger/teurer
+als beim Merken" delta compares against. A gespeicherte Suche stores nothing but the filter
+querystring, because the URL already *is* the complete filter state.
+
+The Merkliste has **two interchangeable backends**: `watchlist.jsx` serves the localStorage list
+when logged out and the account's list when logged in. Components (`WatchButton`,
+`WatchlistPage`) only ever call `useWatchlist()` and don't know which is active. Logging in
+doesn't move anything automatically — the Merkliste page offers a one-way import, and entries
+already on the server keep their original `price_cents_at_save`, since overwriting a historical
+measurement would falsify the delta.
+
+### Measured vs. claimed discount
+
+`price_snapshot` being append-only is what makes this possible, and it's the differentiator a
+price comparator without its own history can't copy: a shop's `list_price` is a number the shop
+controls, so nothing user-facing ranks by it.
+
+- `app/pricing/history.py` — pure functions (no ORM, no DB, unit-tested in
+  `tests/test_pricing_history.py`) defining what all-time low, "not cheaper since N days", and
+  **real discount** (current price vs. the highest price we ever observed being charged) mean.
+  Consumed by `/api/variants/{id}`'s `price_stats`.
+- `app/api/deals.py` — `GET /api/deals` ranks by the drop against the newest snapshot at least
+  `window_days` old. That reference point, not a max or average, is what lets the UI name a date
+  ("−49 % gegenüber 138,97 € vom 04.08."). Variants without a snapshot that old drop out rather
+  than being compared against a guessed baseline, so a long `window_days` on a freshly imported
+  catalog correctly returns nothing.
+- `GET /api/dashboard/shop-trust` rolls the per-article honesty check up per shop.
+- `price_cents` are integers — discount expressions multiply by `100.0` first, or SQL integer
+  division floors every drop to zero.
+
 ### Attribute provenance
 
 Every attribute in `product.attributes` has a matching entry in `product.attribute_sources`:
@@ -132,7 +243,7 @@ migration with backfill, not a reset.
 
 ## Explicitly out of scope
 
-Cross-shop reviews, user accounts/wishlists/notifications, size conversion between systems
+Cross-shop reviews, size conversion between systems
 (W32 ↔ 48 ↔ EU36, or between the W/L, S–XXL, and EU-shoe-size systems now all present in the
 catalog). Categories beyond the current three are addable per the pattern above but each still
 needs a hand-written extractor — there's no zero-effort "any category" support, despite filtering

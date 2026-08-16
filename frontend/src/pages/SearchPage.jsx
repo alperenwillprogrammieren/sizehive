@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchFacets, fetchSearch } from "../api";
 import { DEFAULT_FILTERS, filtersFromSearchParams, searchParamsFromFilters } from "../filters";
+import { clearRecentlyViewed, useRecentlyViewed } from "../collections";
 import FacetSidebar from "../components/FacetSidebar";
 import ActiveFilters from "../components/ActiveFilters";
 import ResultsList from "../components/ResultsList";
+import SavedSearches from "../components/SavedSearches";
+import SearchSuggest from "../components/SearchSuggest";
+import VariantStrip from "../components/VariantStrip";
 
 export default function SearchPage() {
   const [filters, setFilters] = useState(() =>
@@ -13,6 +17,7 @@ export default function SearchPage() {
   const [facetsData, setFacetsData] = useState({ facets: {} });
   const [loading, setLoading] = useState(false);
   const [qInput, setQInput] = useState(filters.q);
+  const recentlyViewed = useRecentlyViewed();
 
   useEffect(() => {
     const searchParams = searchParamsFromFilters(filters, { includePaging: true });
@@ -86,20 +91,23 @@ export default function SearchPage() {
 
   const clearAll = useCallback(() => setFilters({ ...DEFAULT_FILTERS, attrs: {} }), []);
 
+  // A saved search is a stored filter querystring — applying it is the same
+  // parse the page does on load.
+  const applySavedSearch = useCallback((query) => {
+    setFilters(filtersFromSearchParams(new URLSearchParams(query)));
+  }, []);
+
   const setPage = useCallback((page) => setFilters((prev) => ({ ...prev, page })), []);
 
   const totalPages = Math.max(1, Math.ceil(searchData.total / (searchData.page_size || 20)));
 
   return (
     <>
-      <div className="search-bar">
-        <input
-          type="search"
-          placeholder="Suche nach Marke, Modell, Beschreibung…"
-          value={qInput}
-          onChange={(e) => setQInput(e.target.value)}
-        />
-      </div>
+      <SearchSuggest
+        value={qInput}
+        onChange={setQInput}
+        onSubmit={(term) => setFilters((prev) => ({ ...prev, q: term, page: 1 }))}
+      />
 
       <ActiveFilters
         filters={filters}
@@ -108,6 +116,8 @@ export default function SearchPage() {
         onClearAttr={clearAttr}
         onClearAll={clearAll}
       />
+
+      <SavedSearches filters={filters} onApply={applySavedSearch} />
 
       <div className="app-body">
         <FacetSidebar
@@ -120,7 +130,15 @@ export default function SearchPage() {
 
         <main className="results-area">
           <div className="results-toolbar">
-            <span>{searchData.total} Treffer</span>
+            <span>
+              {searchData.total} Treffer
+              {searchData.fuzzy && (
+                <span className="fuzzy-note">
+                  {" "}
+                  — keine exakten Treffer für „{filters.q}", daher ähnliche Schreibweisen
+                </span>
+              )}
+            </span>
             <select value={filters.sort} onChange={(e) => updateField("sort", e.target.value)}>
               <option value="newest">Neuheit</option>
               <option value="price_asc">Preis aufsteigend</option>
@@ -144,6 +162,8 @@ export default function SearchPage() {
               </button>
             </div>
           )}
+
+          <VariantStrip ids={recentlyViewed} title="Zuletzt angesehen" onClear={clearRecentlyViewed} />
         </main>
       </div>
     </>

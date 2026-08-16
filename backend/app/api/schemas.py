@@ -27,6 +27,34 @@ class SearchResponse(BaseModel):
     total: int
     page: int
     page_size: int
+    #: True when the exact term found nothing and these are typo-tolerant hits.
+    fuzzy: bool = False
+    results: list[SearchResultItem]
+
+
+class Suggestion(BaseModel):
+    value: str
+    #: "brand" | "model" | "category"
+    kind: str
+    count: int
+
+
+class SuggestResponse(BaseModel):
+    suggestions: list[Suggestion]
+
+
+class SimilarItem(SearchResultItem):
+    similarity: float
+    #: Attribute keys whose value matches the article being viewed — the
+    #: reason this item is shown at all.
+    shared_attributes: list[str]
+
+
+class SimilarResponse(BaseModel):
+    results: list[SimilarItem]
+
+
+class VariantBatchResponse(BaseModel):
     results: list[SearchResultItem]
 
 
@@ -44,6 +72,23 @@ class PricePoint(BaseModel):
     price_eur: float
     list_price_eur: float
     in_stock: bool
+
+
+class PriceStatsResponse(BaseModel):
+    """Measured price context for one variant — see app/pricing/history.py."""
+    all_time_low_eur: float
+    all_time_high_eur: float
+    low_30d_eur: float | None
+    low_90d_eur: float | None
+    median_90d_eur: float | None
+    is_all_time_low: bool
+    days_since_cheaper: int | None
+    #: What the shop advertises: list price vs. current price.
+    claimed_discount_pct: float
+    #: What we measured: highest price ever actually charged vs. current.
+    real_discount_pct: float
+    first_seen: datetime
+    snapshot_count: int
 
 
 class VariantDetailResponse(BaseModel):
@@ -67,7 +112,113 @@ class VariantDetailResponse(BaseModel):
     percentile_score: float | None
     comparable_count: int
     list_price_ever_charged: bool
+    price_stats: PriceStatsResponse
     price_history: list[PricePoint]
+
+
+class DealItem(SearchResultItem):
+    """A search result plus the measured price drop that makes it a deal.
+    `discount_pct` (inherited) is the shop's claim; `drop_pct` is observed."""
+    reference_price_eur: float
+    reference_captured_at: datetime
+    drop_eur: float
+    drop_pct: float
+    is_all_time_low: bool
+    all_time_low_eur: float
+
+
+class DealsResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    window_days: int
+    results: list[DealItem]
+
+
+class ShopTrust(BaseModel):
+    shop_name: str
+    variants_total: int
+    variants_with_claimed_discount: int
+    claimed_discount_never_charged: int
+    #: Share of advertised discounts whose list price was genuinely charged
+    #: at some point. None when the shop advertises no discounts at all.
+    trust_pct: float | None
+    avg_claimed_discount_pct: float | None
+    avg_real_discount_pct: float | None
+
+
+class ShopTrustResponse(BaseModel):
+    shops: list[ShopTrust]
+
+
+class LoginRequest(BaseModel):
+    email: str
+
+
+class VerifyRequest(BaseModel):
+    token: str
+
+
+class UserResponse(BaseModel):
+    email: str
+    created_at: datetime
+
+
+class WatchlistEntryIn(BaseModel):
+    variant_id: int
+    price_eur_at_save: float | None = None
+
+
+class WatchlistImportRequest(BaseModel):
+    items: list[WatchlistEntryIn]
+
+
+class WatchlistEntry(BaseModel):
+    variant_id: int
+    price_eur_at_save: float | None
+    created_at: datetime
+
+
+class WatchlistResponse(BaseModel):
+    items: list[WatchlistEntry]
+
+
+class PriceAlertIn(BaseModel):
+    variant_id: int
+    #: None means "notify at any price we have never recorded before".
+    target_price_eur: float | None = None
+
+
+class PriceAlertOut(BaseModel):
+    id: int
+    variant_id: int
+    target_price_eur: float | None
+    active: bool
+    created_at: datetime
+    last_notified_at: datetime | None
+
+
+class PriceAlertsResponse(BaseModel):
+    alerts: list[PriceAlertOut]
+
+
+class SearchAgentIn(BaseModel):
+    name: str
+    #: The filter querystring, exactly as it appears in the frontend URL.
+    query: str
+
+
+class SearchAgentOut(BaseModel):
+    id: int
+    name: str
+    query: str
+    active: bool
+    created_at: datetime
+    last_run_at: datetime | None
+
+
+class SearchAgentsResponse(BaseModel):
+    agents: list[SearchAgentOut]
 
 
 class CategoryCoverage(BaseModel):
@@ -79,3 +230,38 @@ class CategoryCoverage(BaseModel):
 class DashboardResponse(BaseModel):
     total_products: int
     by_category: list[CategoryCoverage]
+
+
+class PriceDistributionGroup(BaseModel):
+    group: str
+    count: int
+    min_eur: float
+    p25_eur: float
+    median_eur: float
+    p75_eur: float
+    max_eur: float
+
+
+class PriceDistributionResponse(BaseModel):
+    dimension: str
+    groups: list[PriceDistributionGroup]
+
+
+class AttributeValuePrice(BaseModel):
+    value: str
+    count: int
+    median_eur: float
+    #: Median of this value against the median across the whole attribute,
+    #: in percent. Positive means this value sells dearer.
+    delta_pct: float
+
+
+class AttributePrices(BaseModel):
+    attribute: str
+    median_eur: float
+    values: list[AttributeValuePrice]
+
+
+class AttributePricesResponse(BaseModel):
+    category: str
+    attributes: list[AttributePrices]

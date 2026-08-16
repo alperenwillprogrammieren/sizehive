@@ -152,3 +152,151 @@ Kategorien (T-Shirts, Sneaker) mit eigener Attribut-Taxonomie, ohne Migration.
 - **Preisverlauf-Simulationsskript ist idempotent pro Variante**, nicht nur pro Lauf: beim
   Reset+Reimport nach der Kategorie-Erweiterung lief es erneut über alle (jetzt 780 statt 660)
   Varianten und reicherte nur die tatsächlich neuen an.
+
+## Post-MVP-Erweiterung: Paket 1 (lokaler Nutzerzustand) + Paket 2 (gemessener Rabatt)
+
+### Paket 1 — Merkliste, gespeicherte Suchen, Dark Mode
+
+- **localStorage statt Nutzerkonten.** Merkliste, gespeicherte Suchen und "zuletzt angesehen"
+  sind bewusst pro Browser und ohne Login umgesetzt. Damit bleibt die in `CLAUDE.md` gezogene
+  Grenze "keine serverseitige Identität" bestehen, und drei der vier gewünschten Features sind
+  ohne Auth, Mailversand und DSGVO-Fragen sofort nutzbar. Ein späterer Umzug auf echte Konten
+  ist eine Migration der Datenhaltung, keine Neukonzeption der UI.
+- **Gespeichert werden nur IDs, nie Produktkopien.** Die Merkliste hält `variant_id` plus
+  Zeitstempel; alles Anzeigbare wird bei jedem Aufruf über den neuen Endpunkt
+  `GET /api/variants?ids=…` frisch geladen. Eine im Browser eingefrorene Produktkopie würde sonst
+  Preise anzeigen, die es nicht mehr gibt — genau der Fehler, den diese Seite eigentlich aufdeckt.
+  Der Endpunkt liefert dieselbe Item-Form wie `/api/search`, deshalb rendert die Merkliste
+  dieselbe Karte wie die Suche (`ResultCard`), ohne zweite Darstellungslogik.
+- **Ausnahme `price_eur_at_save`.** Der Preis zum Zeitpunkt des Merkens wird lokal festgehalten,
+  weil er ein historischer Messwert ist und nicht rekonstruiert werden kann: Er ist die
+  Vergleichsbasis für "günstiger/teurer als beim Merken".
+- **Gespeicherte Suche = Querystring.** Der Filterzustand liegt bereits vollständig in der URL
+  (M6). Eine gespeicherte Suche speichert deshalb nur diesen String plus einen Namen — kein
+  zweites Filter-Schema, das mit `filters.js` synchron gehalten werden müsste.
+- **Theme: `data-theme` am `<html>`, nicht `prefers-color-scheme` im CSS.** `initTheme()` löst
+  "system" vor dem ersten Rendern in JS auf und stempelt das Ergebnis als Attribut. So braucht das
+  Stylesheet nur `:root` und `:root[data-theme="dark"]`, ein expliziter Nutzerwunsch schlägt die
+  Systemeinstellung sauber, und ein Reload im Dark Mode blitzt nicht kurz hell auf. Alle Farben
+  laufen über Tokens in `index.css`; die Dark-Palette ist ein einzelner Override-Block.
+- **`localStore.js` cached geparste Werte pro Key.** `useSyncExternalStore` verlangt ein
+  referenziell stabiles `getSnapshot()`; ein frisches `JSON.parse()` pro Aufruf würde eine
+  Render-Schleife auslösen.
+
+### Paket 2 — Deals aus gemessener statt behaupteter Preissenkung
+
+- **Der Streichpreis wird für das Deal-Ranking gar nicht erst benutzt.** `list_price` ist eine vom
+  Shop frei gesetzte Zahl. `GET /api/deals` vergleicht stattdessen den aktuellen Preis mit dem
+  Preis, den wir vor `window_days` Tagen selbst aufgezeichnet haben. Das ist der eine Punkt, an dem
+  die append-only-Preishistorie einen Vorteil ergibt, den ein reiner Preisvergleicher ohne eigene
+  Historie nicht nachbauen kann.
+- **Referenzpunkt = jüngster Snapshot, der mindestens `window_days` alt ist.** Nicht der Höchst-
+  oder Durchschnittspreis im Fenster: Die Aussage soll wörtlich "so viel hat der Artikel vor X
+  Tagen gekostet" sein und am Datum des Snapshots überprüfbar bleiben (die Karte zeigt es an).
+  Varianten ohne so alten Snapshot fallen aus der Liste, statt mit einer geratenen Basis zu
+  erscheinen — deshalb ist `window_days=365` bei ~35 Tagen Demo-Historie korrekterweise leer.
+- **Integer-Fallstrick.** `price_cents` sind Ganzzahlen; die Rabattberechnung multipliziert
+  zuerst mit `100.0`, sonst schneidet die Ganzzahldivision in SQL jede Senkung auf 0 ab.
+- **Zwei Rabattbegriffe, überall nebeneinander gezeigt.** "Rabatt laut Shop" (gegen den
+  Streichpreis) und "tatsächlicher Rabatt" (gegen den höchsten je von uns beobachteten Preis)
+  stehen auf der Detailseite direkt nebeneinander, statt einen der beiden zu unterdrücken. Wo die
+  Behauptung mindestens 5 Prozentpunkte über der Messung liegt, wird die Differenz benannt.
+- **Shop-Vertrauensscore ist die Aggregation des bestehenden M7-Checks.** Der
+  Streichpreis-Ehrlichkeits-Check existierte pro Artikel; `GET /api/dashboard/shop-trust` rollt
+  ihn pro Shop auf. Der teure Teil (Scan über alle Snapshots) bleibt als Gruppierung in der
+  Datenbank, die Aufsummierung pro Shop läuft über eine Zeile je Variante in Python.
+- **`app/pricing/history.py` als reine Funktionen ohne ORM.** Die Regeln, was Tiefstpreis,
+  "seit wann nicht günstiger" und tatsächlicher Rabatt bedeuten, sind ohne Datenbank
+  unit-testbar (`tests/test_pricing_history.py`) — dieselbe Trennung wie bei den Normalisierern
+  und Extraktoren.
+
+## Post-MVP-Erweiterung: Paket 3 (Konten, Preisalarm, Suchagent)
+
+Bewusste Scope-Änderung: `CLAUDE.md` und der Spec führten Nutzerkonten, Wunschlisten und
+Benachrichtigungen als ausdrücklich nicht enthalten. Preisalarm und Suchagent lassen sich ohne
+serverseitige Identität aber grundsätzlich nicht bauen — irgendetwas muss laufen, während der
+Browser zu ist, und wissen, wohin das Ergebnis geht. Alles andere bleibt ohne Konto benutzbar.
+
+- **Passwortlos statt Passwörter.** Login läuft über einen einmalig gültigen Magic-Link. Damit
+  entfallen Passwort-Hashing, Passwort-Reset-Flow und die Haftung für gespeicherte Passwörter
+  komplett — bei einer Anwendung, deren einziger Zweck Benachrichtigungen per Mail sind, ist die
+  Mailadresse ohnehin der Anker.
+- **Nur Hashes in der Datenbank**, für Login-Token und Session gleichermaßen. Ungesalzenes SHA-256
+  ist hier korrekt und *nicht* auf Passwörter übertragbar: Die Token sind 32 Byte aus `secrets`,
+  es gibt kein Wörterbuch anzugreifen und keinen Grund für eine langsame KDF, während der
+  ungesalzene Hash den Lookup ein indizierter Gleichheitsvergleich bleiben lässt.
+- **Cooldown von 60 Sekunden pro Adresse** beim Anfordern eines Login-Links. Ohne das wäre der
+  Endpunkt ein Mail-Bombing-Werkzeug gegen beliebige Dritte. Die Antwort ist immer dieselbe,
+  egal ob Konto neu, bekannt oder gerade gebremst — sonst verrät der Endpunkt, wer ein Konto hat.
+- **Zwei Anti-Spam-Regeln wiegen schwerer als der Auslöser selbst** (`app/notify/rules.py`):
+  Eine Wiederholungsmail setzt einen *echt niedrigeren* Preis als den zuletzt gemeldeten voraus,
+  und ein Alarm ohne Zielpreis feuert nur bei einem Preis, den wir noch nie aufgezeichnet haben.
+  Ohne die erste Regel schickt ein um den Zielpreis pendelnder Preis bei jedem Lauf eine Mail.
+  Beide Regeln sind reine Funktionen und in `tests/test_notify_rules.py` vollständig abgedeckt.
+- **Ein Suchagent ist ein gespeicherter Querystring**, exakt der String aus der Frontend-URL.
+  Damit ist eine gespeicherte Suche (Paket 1) und ein Suchagent dieselbe Sache in zwei
+  Speicherorten, statt zweier paralleler Filterdarstellungen. `filters_from_query_string()`
+  parst ihn ohne HTTP-Request und verwirft unparsebare Einzelwerte, statt den ganzen Lauf
+  abzubrechen — ein Agent kann Monate alt und sein Query von Hand editiert worden sein.
+- **"Neu" heißt `variant.created_at > last_run_at`**, also dieselbe Spalte, auf der schon die
+  "Neuheit"-Sortierung beruht. Ein erneuter Import eines bestehenden Angebots zählt damit nicht
+  als neu (Varianten werden über `shop_id + shop_sku` gematcht, M2). `last_run_at` startet bei
+  der Anlage, damit ein frischer Agent nicht den kompletten Bestand als erste Mail schickt.
+- **Ohne konfiguriertes SMTP wird Mail geloggt statt versendet.** Bewusst kein stiller No-Op:
+  Login-Link und Benachrichtigungstexte landen im Log, damit der komplette Ablauf ohne
+  Mailserver durchspielbar bleibt. Das machte eine zweite Änderung nötig — `app/main.py`
+  konfiguriert jetzt Logging auf INFO. Vorher konfigurierte *nichts* im Projekt Logging, der
+  Root-Logger stand auf WARNING, und die Zeilen verschwanden spurlos (nur `logger.warning` aus
+  dem Größen-Parser war sichtbar, über Pythons Last-Resort-Handler). Damit wäre die Anmeldung in
+  der Entwicklung schlicht unmöglich gewesen.
+- **Merkliste mit zwei austauschbaren Backends.** `watchlist.jsx` bedient dieselbe Schnittstelle
+  aus localStorage (abgemeldet) oder aus dem Konto (angemeldet); `WatchButton` und die
+  Merklisten-Seite wissen nicht, welches aktiv ist. Die Anmeldung übernimmt nichts automatisch —
+  die Seite bietet einen einmaligen Import an. Bereits im Konto liegende Einträge behalten dabei
+  ihren ursprünglichen `price_cents_at_save`: Der Wert ist ein historischer Messwert, ihn zu
+  überschreiben würde den Vergleich "günstiger als beim Merken" verfälschen.
+- **Nebenbei behoben:** Varianten ohne `image_url` (im Feed erlaubt, Spalte hat Default `""`)
+  rendered ein `<img src="">`. Browser interpretieren das als Verweis auf die aktuelle Seite und
+  laden sie als Bild erneut. Die neue Komponente `ProductImage` rendert stattdessen einen
+  Platzhalter.
+
+## Post-MVP-Erweiterung: Paket 4 (Suche und Statistik)
+
+- **Tippfehlertoleranz als Fallback, nicht als Modus.** Die strenge Substring-Suche läuft
+  zuerst; erst wenn sie nichts findet, wird dieselbe Anfrage gegen `word_similarity` aus
+  pg_trgm wiederholt. Damit bleibt der Normalfall exakt, und erst dadurch ist ein großzügiger
+  Schwellwert richtig: Die Alternative zu einem unscharfen Treffer ist eine leere Seite.
+  Gemessen am Beispielkatalog: „tomy hilfiger" 0.81, „slimm taperd" 0.64, „levsi" 0.50,
+  „wranlger" 0.44, echter Buchstabensalat 0.00 — deshalb 0.4.
+- **`/facets` benutzt denselben Fallback wie `/search`.** Sonst zeigt die Seite Treffer, während
+  die Facettenleiste daneben leer bleibt und ein anderes Ergebnis beschreibt. Kostet eine
+  zusätzliche Count-Abfrage, aber nur wenn überhaupt ein Suchbegriff gesetzt ist.
+- **`/suggest` hat bewusst keinen Fallback**, sondern verodert Substring und Ähnlichkeit in
+  einem Durchgang: Eine Vorschlagsliste, die beim Vertippen stillschweigend leer bleibt, ist
+  genau der Fall, für den Autocomplete existiert.
+- **Ähnlichkeit ist Attributüberschneidung zuerst, Preisnähe zweitens** (75/25). Kein
+  Collaborative Filtering (es gibt keine Kaufhistorien) und kein Markenabgleich — denselben
+  Artikel in einem anderen Shop zu finden, macht bereits das Produkt-Matching beim Import.
+  Nur innerhalb derselben Kategorie, weil sich die Attributvokabulare nicht überschneiden:
+  Ein gleicher Preis darf einen Sneaker nicht zu einer „ähnlichen" Jeans machen. Deshalb ist
+  der Attributterm 0, wenn es keinen gemeinsamen Schlüssel gibt, statt auf 1 zu defaulten.
+- **`CREATE EXTENSION pg_trgm` ist eine Deploy-Voraussetzung.** In verwalteten Datenbanken
+  fehlen dem Anwendungsnutzer dafür oft die Rechte. Die Migration macht es explizit, statt es
+  zur Laufzeit zu versuchen; das `downgrade` löscht nur die Indizes und lässt die Extension
+  stehen — andere Objekte könnten davon abhängen.
+- **Gruppen unter fünf Angeboten fallen aus den Statistiken.** Ein „Median" über drei Artikel
+  ist Rauschen im Gewand einer Kennzahl.
+- **Basiswert des Attributvergleichs ist der Median der Attributwerte selbst**, nicht der
+  Kategorienmedian: Die Werte sind ungleich verteilt, und ein Vergleich gegen die Kategorie
+  würde Artikel einrechnen, die das Attribut gar nicht haben.
+- **Diagramm-Kodierung.** Marken und Kategorien sind nominal — jede Box bekommt dieselbe
+  einzelne Serienfarbe. Sie nach Wert einzufärben würde die Balkenlage ein zweites Mal
+  kodieren und den einzigen freien Kanal dafür verbrauchen. Preisabweichung ist dagegen eine
+  Polaritätsfrage und bekommt das divergierende Paar mit neutralem Grau bei null — bewusst
+  nicht die Statusfarben, denn „teurer" ist nicht „schlecht". Die Chart-Tokens sind je Modus
+  gegen die tatsächliche Kartenfläche validiert; die Dunkelwerte sind eigene Stufen, keine
+  Umkehrung. Jedes Diagramm hat einen Tabellen-Zwilling, damit kein Wert nur über Hover
+  erreichbar ist.
+- **Beim Ansehen des gerenderten Diagramms gefunden:** Ein Balken mit voller negativer
+  Ausdehnung endet genau an der Beschriftungsspalte, sein Wertlabel wäre darüber gelaufen.
+  Behoben durch eine reservierte Label-Spur auf beiden Seiten der Plotfläche.
