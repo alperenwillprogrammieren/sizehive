@@ -94,6 +94,25 @@ This is the load-bearing design decision, proven out by three categories today
 extractor class, generate/import some data with that `category` value. No DB migration, no new
 API parameters, no required frontend change (labels are a nice-to-have, not a dependency).
 
+### Client-side state (no accounts)
+
+There is no user table and no auth. Everything user-specific lives in `localStorage` behind
+`frontend/src/localStore.js`, a small reactive wrapper (one subscriber set per key, exposed via
+`useSyncExternalStore`, parsed values cached so `getSnapshot` stays referentially stable):
+
+- `frontend/src/collections.js` — Merkliste, gespeicherte Suchen, zuletzt angesehen.
+- `frontend/src/theme.js` — `system`/`light`/`dark`. "system" is resolved in JS and stamped as
+  `data-theme` on `<html>` before first paint (`initTheme()` in `main.jsx`), so the CSS only ever
+  needs `:root` and `:root[data-theme="dark"]` — no `prefers-color-scheme` in the stylesheet — and
+  a dark reload never flashes light. All colors go through the tokens in `index.css`.
+
+**These collections store variant ids only** — never a copy of the product. The live data is
+re-fetched from `GET /api/variants?ids=1,2,3` (`useVariants.js`) on every view, so a saved entry
+can't show a stale price or a since-deleted article. The one exception is the Merkliste's
+`price_eur_at_save`, which is deliberately a historical snapshot: it's what the "günstiger/teurer
+als beim Merken" delta compares against. A gespeicherte Suche stores nothing but the filter
+querystring, because the URL already *is* the complete filter state.
+
 ### Attribute provenance
 
 Every attribute in `product.attributes` has a matching entry in `product.attribute_sources`:
@@ -132,7 +151,9 @@ migration with backfill, not a reset.
 
 ## Explicitly out of scope
 
-Cross-shop reviews, user accounts/wishlists/notifications, size conversion between systems
+Cross-shop reviews, user accounts and anything that needs server-side identity (the Merkliste and
+gespeicherte Suchen are per-browser `localStorage` only — see "Client-side state" above; price
+alerts and notifications would need real accounts and are not built), size conversion between systems
 (W32 ↔ 48 ↔ EU36, or between the W/L, S–XXL, and EU-shoe-size systems now all present in the
 catalog). Categories beyond the current three are addable per the pattern above but each still
 needs a hand-written extractor — there's no zero-effort "any category" support, despite filtering

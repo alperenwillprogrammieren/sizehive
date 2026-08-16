@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { fetchVariantDetail } from "../api";
+import { recordView } from "../collections";
 import PriceChart from "../components/PriceChart";
+import WatchButton from "../components/WatchButton";
 
 function formatValue(value) {
   return String(value).replace(/_/g, " ");
@@ -63,7 +65,10 @@ export default function ProductDetailPage() {
     setDetail(null);
     setError(null);
     fetchVariantDetail(variantId)
-      .then(setDetail)
+      .then((data) => {
+        setDetail(data);
+        recordView(data.variant_id);
+      })
       .catch((err) => setError(err.message));
   }, [variantId]);
 
@@ -92,12 +97,13 @@ export default function ProductDetailPage() {
             {detail.current_list_price_eur > detail.current_price_eur && (
               <span className="price-list">{detail.current_list_price_eur.toFixed(2)} €</span>
             )}
+            <WatchButton variantId={detail.variant_id} priceEur={detail.current_price_eur} />
           </div>
           {!detail.in_stock && <div className="out-of-stock">Nicht verfügbar</div>}
 
           {detail.percentile_score !== null && (
             <div className="percentile-score">
-              Günstiger als <strong>{detail.percentile_score.toFixed(0)}%</strong> der vergleichbaren Jeans
+              Günstiger als <strong>{detail.percentile_score.toFixed(0)}%</strong> der Artikel in {detail.category}
               <span className="percentile-note"> ({detail.comparable_count} verglichen)</span>
             </div>
           )}

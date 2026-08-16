@@ -22,24 +22,24 @@ export default function PriceChart({ points }) {
 
   return (
     <svg className="price-chart" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label="Preisverlauf">
-      <line x1={PAD} y1={HEIGHT - PAD} x2={WIDTH - PAD} y2={HEIGHT - PAD} stroke="#d0d0d5" />
-      <line x1={PAD} y1={PAD} x2={PAD} y2={HEIGHT - PAD} stroke="#d0d0d5" />
+      <line x1={PAD} y1={HEIGHT - PAD} x2={WIDTH - PAD} y2={HEIGHT - PAD} stroke="var(--border-strong)" />
+      <line x1={PAD} y1={PAD} x2={PAD} y2={HEIGHT - PAD} stroke="var(--border-strong)" />
 
-      <text x={PAD} y={PAD - 10} fontSize="11" fill="#6b6b70">
+      <text x={PAD} y={PAD - 10} fontSize="11" fill="var(--text-muted)">
         {max.toFixed(2)} €
       </text>
-      <text x={PAD} y={HEIGHT - PAD + 16} fontSize="11" fill="#6b6b70">
+      <text x={PAD} y={HEIGHT - PAD + 16} fontSize="11" fill="var(--text-muted)">
         {min.toFixed(2)} €
       </text>
 
-      <path d={linePath} fill="none" stroke="#1c1c1e" strokeWidth="2" />
+      <path d={linePath} fill="none" stroke="var(--text)" strokeWidth="2" />
       {points.map((p, i) => (
         <circle
           key={p.captured_at}
           cx={x(i)}
           cy={y(p.price_eur)}
-          r={p.in_stock ? 3 : 3}
-          fill={p.in_stock ? "#1c1c1e" : "#d0263d"}
+          r={3}
+          fill={p.in_stock ? "var(--text)" : "var(--danger)"}
         >
           <title>
             {formatDate(p.captured_at)}: {p.price_eur.toFixed(2)} € {p.in_stock ? "" : "(nicht verfügbar)"}
@@ -47,10 +47,10 @@ export default function PriceChart({ points }) {
         </circle>
       ))}
 
-      <text x={PAD} y={HEIGHT - 6} fontSize="11" fill="#9a9aa0">
+      <text x={PAD} y={HEIGHT - 6} fontSize="11" fill="var(--text-faint)">
         {formatDate(points[0].captured_at)}
       </text>
-      <text x={WIDTH - PAD} y={HEIGHT - 6} fontSize="11" fill="#9a9aa0" textAnchor="end">
+      <text x={WIDTH - PAD} y={HEIGHT - 6} fontSize="11" fill="var(--text-faint)" textAnchor="end">
         {formatDate(points[points.length - 1].captured_at)}
       </text>
     </svg>

@@ -71,3 +71,33 @@ export function searchParamsFromFilters(f, { includePaging = true } = {}) {
   }
   return sp;
 }
+
+export function hasActiveFilters(f) {
+  return searchParamsFromFilters(f, { includePaging: false }).toString() !== "";
+}
+
+const DESCRIBE_LABELS = {
+  size_w: "W",
+  size_l: "L",
+};
+
+/** Short human-readable summary of the active filters — used as the default
+ *  name when saving a search. */
+export function describeFilters(f) {
+  const parts = [];
+  if (f.q) parts.push(`„${f.q}"`);
+  for (const key of MULTI_KEYS) {
+    for (const value of f[key] || []) parts.push(String(value).replace(/_/g, " "));
+  }
+  for (const value of Object.values(f.attrs || {})) {
+    if (value) parts.push(String(value).replace(/_/g, " "));
+  }
+  for (const key of ["size_w", "size_l"]) {
+    if (f[key]) parts.push(`${DESCRIBE_LABELS[key]}${f[key]}`);
+  }
+  if (f.price_min && f.price_max) parts.push(`${f.price_min}–${f.price_max} €`);
+  else if (f.price_min) parts.push(`ab ${f.price_min} €`);
+  else if (f.price_max) parts.push(`bis ${f.price_max} €`);
+  if (f.in_stock_only) parts.push("nur lieferbar");
+  return parts.length ? parts.join(" · ") : "Alle Artikel";
+}

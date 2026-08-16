@@ -19,7 +19,13 @@ from sqlalchemy import Integer, and_, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
-from app.api.schemas import FacetsResponse, FacetValue, SearchResponse, SearchResultItem
+from app.api.schemas import (
+    FacetsResponse,
+    FacetValue,
+    SearchResponse,
+    SearchResultItem,
+    VariantBatchResponse,
+)
 from app.db.session import SessionLocal
 from app.models import PriceSnapshot, Product, Shop, Variant
 
@@ -149,6 +155,30 @@ def _apply_filters(stmt, filters: SearchFilters, exclude: str | None = None):
     return stmt.where(and_(*conditions)) if conditions else stmt
 
 
+def _to_result_item(variant: Variant, product: Product, shop: Shop, price: PriceSnapshot) -> SearchResultItem:
+    list_price = price.list_price_cents
+    discount_pct = ((list_price - price.price_cents) / list_price * 100) if list_price else 0.0
+    return SearchResultItem(
+        variant_id=variant.id,
+        product_id=product.id,
+        category=product.category,
+        brand=product.brand,
+        model_name=product.model_name,
+        attributes=product.attributes,
+        size_w=variant.size_w,
+        size_l=variant.size_l,
+        size_raw=variant.size_raw,
+        color=variant.color,
+        shop_name=shop.name,
+        price_eur=price.price_cents / 100,
+        list_price_eur=price.list_price_cents / 100,
+        discount_pct=round(discount_pct, 1),
+        in_stock=price.in_stock,
+        image_url=variant.image_url,
+        url=variant.url,
+    )
+
+
 def _apply_sort(stmt, sort: str):
     if sort == "price_asc":
         return stmt.order_by(PriceSnapshot.price_cents.asc())
@@ -174,32 +204,35 @@ def search(
     total = session.scalar(select(func.count()).select_from(base_stmt.subquery()))
 
     stmt = _apply_sort(base_stmt, sort).offset((page - 1) * page_size).limit(page_size)
-    results = []
-    for variant, product, shop, price in session.execute(stmt).all():
-        list_price = price.list_price_cents
-        discount_pct = ((list_price - price.price_cents) / list_price * 100) if list_price else 0.0
-        results.append(
-            SearchResultItem(
-                variant_id=variant.id,
-                product_id=product.id,
-                category=product.category,
-                brand=product.brand,
-                model_name=product.model_name,
-                attributes=product.attributes,
-                size_w=variant.size_w,
-                size_l=variant.size_l,
-                size_raw=variant.size_raw,
-                color=variant.color,
-                shop_name=shop.name,
-                price_eur=price.price_cents / 100,
-                list_price_eur=price.list_price_cents / 100,
-                discount_pct=round(discount_pct, 1),
-                in_stock=price.in_stock,
-                image_url=variant.image_url,
-                url=variant.url,
-            )
-        )
+    results = [_to_result_item(*row) for row in session.execute(stmt).all()]
     return SearchResponse(total=total, page=page, page_size=page_size, results=results)
+
+
+MAX_BATCH_IDS = 200
+
+
+@router.get("/variants", response_model=VariantBatchResponse)
+def variants_batch(
+    ids: str = Query("", description="Comma-separated variant ids, e.g. ?ids=12,44,91"),
+    session: Session = Depends(get_session),
+):
+    """Current state of a known set of variants, in the same item shape as
+    /api/search. Backs client-side collections (watchlist, recently viewed)
+    that store nothing but ids locally and re-resolve prices on every view —
+    so a saved entry can never show a stale price."""
+    wanted = []
+    for chunk in ids.split(","):
+        chunk = chunk.strip()
+        if chunk.isdigit():
+            wanted.append(int(chunk))
+    wanted = list(dict.fromkeys(wanted))[:MAX_BATCH_IDS]
+    if not wanted:
+        return VariantBatchResponse(results=[])
+
+    stmt = _add_common_joins(select(Variant, Product, Shop, PriceSnapshot)).where(Variant.id.in_(wanted))
+    by_id = {row[0].id: _to_result_item(*row) for row in session.execute(stmt).all()}
+    # Preserve the caller's order; silently skip ids that no longer exist.
+    return VariantBatchResponse(results=[by_id[vid] for vid in wanted if vid in by_id])
 
 
 FIXED_FACET_COLUMNS = {

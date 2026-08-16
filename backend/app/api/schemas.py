@@ -30,6 +30,10 @@ class SearchResponse(BaseModel):
     results: list[SearchResultItem]
 
 
+class VariantBatchResponse(BaseModel):
+    results: list[SearchResultItem]
+
+
 class FacetValue(BaseModel):
     value: str
     count: int

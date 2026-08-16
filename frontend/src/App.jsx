@@ -1,10 +1,15 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import "./App.css";
+import { useWatchlist } from "./collections";
+import ThemeToggle from "./components/ThemeToggle";
 import SearchPage from "./pages/SearchPage";
 import ProductDetailPage from "./pages/ProductDetailPage";
 import DashboardPage from "./pages/DashboardPage";
+import WatchlistPage from "./pages/WatchlistPage";
 
 function App() {
+  const watchlist = useWatchlist();
+
   return (
     <div className="app">
       <header className="app-header">
@@ -12,17 +17,25 @@ function App() {
           <h1>sizehive</h1>
           <p className="tagline">Kleidung, shopübergreifend gefiltert</p>
         </div>
-        <nav className="app-nav">
-          <NavLink to="/" end>
-            Suche
-          </NavLink>
-          <NavLink to="/dashboard">Dashboard</NavLink>
-        </nav>
+        <div className="app-header-right">
+          <nav className="app-nav">
+            <NavLink to="/" end>
+              Suche
+            </NavLink>
+            <NavLink to="/merkliste">
+              Merkliste
+              {watchlist.length > 0 && <span className="nav-badge">{watchlist.length}</span>}
+            </NavLink>
+            <NavLink to="/dashboard">Dashboard</NavLink>
+          </nav>
+          <ThemeToggle />
+        </div>
       </header>
 
       <Routes>
         <Route path="/" element={<SearchPage />} />
         <Route path="/product/:variantId" element={<ProductDetailPage />} />
+        <Route path="/merkliste" element={<WatchlistPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
       </Routes>
     </div>
