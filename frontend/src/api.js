@@ -27,6 +27,18 @@ export async function fetchVariantDetail(variantId) {
   return res.json();
 }
 
+export async function fetchDeals(params) {
+  const res = await fetch(`${API_BASE}/deals?${params.toString()}`);
+  if (!res.ok) throw new Error(`deals failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchShopTrust() {
+  const res = await fetch(`${API_BASE}/dashboard/shop-trust`);
+  if (!res.ok) throw new Error(`shop trust failed: ${res.status}`);
+  return res.json();
+}
+
 export async function fetchDashboardCoverage() {
   const res = await fetch(`${API_BASE}/dashboard/coverage`);
   if (!res.ok) throw new Error(`dashboard coverage failed: ${res.status}`);

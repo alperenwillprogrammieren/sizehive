@@ -152,3 +152,60 @@ Kategorien (T-Shirts, Sneaker) mit eigener Attribut-Taxonomie, ohne Migration.
 - **Preisverlauf-Simulationsskript ist idempotent pro Variante**, nicht nur pro Lauf: beim
   Reset+Reimport nach der Kategorie-Erweiterung lief es erneut über alle (jetzt 780 statt 660)
   Varianten und reicherte nur die tatsächlich neuen an.
+
+## Post-MVP-Erweiterung: Paket 1 (lokaler Nutzerzustand) + Paket 2 (gemessener Rabatt)
+
+### Paket 1 — Merkliste, gespeicherte Suchen, Dark Mode
+
+- **localStorage statt Nutzerkonten.** Merkliste, gespeicherte Suchen und "zuletzt angesehen"
+  sind bewusst pro Browser und ohne Login umgesetzt. Damit bleibt die in `CLAUDE.md` gezogene
+  Grenze "keine serverseitige Identität" bestehen, und drei der vier gewünschten Features sind
+  ohne Auth, Mailversand und DSGVO-Fragen sofort nutzbar. Ein späterer Umzug auf echte Konten
+  ist eine Migration der Datenhaltung, keine Neukonzeption der UI.
+- **Gespeichert werden nur IDs, nie Produktkopien.** Die Merkliste hält `variant_id` plus
+  Zeitstempel; alles Anzeigbare wird bei jedem Aufruf über den neuen Endpunkt
+  `GET /api/variants?ids=…` frisch geladen. Eine im Browser eingefrorene Produktkopie würde sonst
+  Preise anzeigen, die es nicht mehr gibt — genau der Fehler, den diese Seite eigentlich aufdeckt.
+  Der Endpunkt liefert dieselbe Item-Form wie `/api/search`, deshalb rendert die Merkliste
+  dieselbe Karte wie die Suche (`ResultCard`), ohne zweite Darstellungslogik.
+- **Ausnahme `price_eur_at_save`.** Der Preis zum Zeitpunkt des Merkens wird lokal festgehalten,
+  weil er ein historischer Messwert ist und nicht rekonstruiert werden kann: Er ist die
+  Vergleichsbasis für "günstiger/teurer als beim Merken".
+- **Gespeicherte Suche = Querystring.** Der Filterzustand liegt bereits vollständig in der URL
+  (M6). Eine gespeicherte Suche speichert deshalb nur diesen String plus einen Namen — kein
+  zweites Filter-Schema, das mit `filters.js` synchron gehalten werden müsste.
+- **Theme: `data-theme` am `<html>`, nicht `prefers-color-scheme` im CSS.** `initTheme()` löst
+  "system" vor dem ersten Rendern in JS auf und stempelt das Ergebnis als Attribut. So braucht das
+  Stylesheet nur `:root` und `:root[data-theme="dark"]`, ein expliziter Nutzerwunsch schlägt die
+  Systemeinstellung sauber, und ein Reload im Dark Mode blitzt nicht kurz hell auf. Alle Farben
+  laufen über Tokens in `index.css`; die Dark-Palette ist ein einzelner Override-Block.
+- **`localStore.js` cached geparste Werte pro Key.** `useSyncExternalStore` verlangt ein
+  referenziell stabiles `getSnapshot()`; ein frisches `JSON.parse()` pro Aufruf würde eine
+  Render-Schleife auslösen.
+
+### Paket 2 — Deals aus gemessener statt behaupteter Preissenkung
+
+- **Der Streichpreis wird für das Deal-Ranking gar nicht erst benutzt.** `list_price` ist eine vom
+  Shop frei gesetzte Zahl. `GET /api/deals` vergleicht stattdessen den aktuellen Preis mit dem
+  Preis, den wir vor `window_days` Tagen selbst aufgezeichnet haben. Das ist der eine Punkt, an dem
+  die append-only-Preishistorie einen Vorteil ergibt, den ein reiner Preisvergleicher ohne eigene
+  Historie nicht nachbauen kann.
+- **Referenzpunkt = jüngster Snapshot, der mindestens `window_days` alt ist.** Nicht der Höchst-
+  oder Durchschnittspreis im Fenster: Die Aussage soll wörtlich "so viel hat der Artikel vor X
+  Tagen gekostet" sein und am Datum des Snapshots überprüfbar bleiben (die Karte zeigt es an).
+  Varianten ohne so alten Snapshot fallen aus der Liste, statt mit einer geratenen Basis zu
+  erscheinen — deshalb ist `window_days=365` bei ~35 Tagen Demo-Historie korrekterweise leer.
+- **Integer-Fallstrick.** `price_cents` sind Ganzzahlen; die Rabattberechnung multipliziert
+  zuerst mit `100.0`, sonst schneidet die Ganzzahldivision in SQL jede Senkung auf 0 ab.
+- **Zwei Rabattbegriffe, überall nebeneinander gezeigt.** "Rabatt laut Shop" (gegen den
+  Streichpreis) und "tatsächlicher Rabatt" (gegen den höchsten je von uns beobachteten Preis)
+  stehen auf der Detailseite direkt nebeneinander, statt einen der beiden zu unterdrücken. Wo die
+  Behauptung mindestens 5 Prozentpunkte über der Messung liegt, wird die Differenz benannt.
+- **Shop-Vertrauensscore ist die Aggregation des bestehenden M7-Checks.** Der
+  Streichpreis-Ehrlichkeits-Check existierte pro Artikel; `GET /api/dashboard/shop-trust` rollt
+  ihn pro Shop auf. Der teure Teil (Scan über alle Snapshots) bleibt als Gruppierung in der
+  Datenbank, die Aufsummierung pro Shop läuft über eine Zeile je Variante in Python.
+- **`app/pricing/history.py` als reine Funktionen ohne ORM.** Die Regeln, was Tiefstpreis,
+  "seit wann nicht günstiger" und tatsächlicher Rabatt bedeuten, sind ohne Datenbank
+  unit-testbar (`tests/test_pricing_history.py`) — dieselbe Trennung wie bei den Normalisierern
+  und Extraktoren.

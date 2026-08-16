@@ -592,6 +592,197 @@ body {
   color: var(--text-muted);
 }
 
+/* Deals */
+
+.deals-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.deals-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.deals-controls select {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.deals-count {
+  margin-left: auto;
+}
+
+.deal-badge {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.deal-headline {
+  font-size: 0.78rem;
+  background: var(--positive-bg);
+  color: var(--positive-text);
+  border-radius: 6px;
+  padding: 0.3rem 0.45rem;
+}
+
+.deal-date {
+  opacity: 0.8;
+}
+
+.deal-flag {
+  font-size: 0.72rem;
+  border-radius: 6px;
+  padding: 0.2rem 0.45rem;
+}
+
+.deal-flag.low {
+  background: var(--invert-bg);
+  color: var(--invert-text);
+  font-weight: 600;
+}
+
+.deal-flag.claim {
+  background: var(--negative-bg);
+  color: var(--negative-text);
+}
+
+/* Price verdict (detail page) */
+
+.price-verdict {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+  max-width: 640px;
+}
+
+.verdict-headline {
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.verdict-headline.good {
+  color: var(--positive-text);
+}
+
+.verdict-headline.warn {
+  color: var(--negative-text);
+}
+
+.verdict-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.verdict-row,
+.verdict-discount {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.verdict-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-faint);
+}
+
+.verdict-value {
+  font-weight: 600;
+}
+
+.verdict-note {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+.verdict-discounts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+}
+
+.verdict-gap {
+  font-size: 0.8rem;
+  background: var(--negative-bg);
+  color: var(--negative-text);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+}
+
+.verdict-basis {
+  font-size: 0.75rem;
+  color: var(--text-faint);
+  margin: 0.75rem 0 0;
+}
+
+/* Shop trust table (dashboard) */
+
+.shop-trust {
+  margin: 1.5rem 0 2.5rem;
+}
+
+.dashboard-section {
+  margin-top: 2.5rem;
+}
+
+.trust-table {
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  width: 100%;
+  max-width: 900px;
+}
+
+.trust-table th,
+.trust-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+}
+
+.trust-table th {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.trust-table td.num,
+.trust-table th:not(:first-child) {
+  text-align: right;
+}
+
+.trust-pct {
+  font-weight: 600;
+}
+
+.trust-pct.good {
+  color: var(--positive-text);
+}
+
+.trust-pct.bad {
+  color: var(--negative-text);
+}
+
 /* Product detail page */
 
 .detail-page {

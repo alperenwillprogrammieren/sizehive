@@ -3,10 +3,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.schemas import CategoryCoverage, DashboardResponse, PricePoint, VariantDetailResponse
+from app.api.schemas import (
+    CategoryCoverage,
+    DashboardResponse,
+    PricePoint,
+    PriceStatsResponse,
+    VariantDetailResponse,
+)
 from app.api.search import _latest_price_subquery, get_session
 from app.extract.report import coverage_report
 from app.models import PriceSnapshot, Product, Shop, Variant
+from app.pricing.history import Snapshot, price_stats
 
 router = APIRouter()
 
@@ -51,7 +58,12 @@ def variant_detail(variant_id: int, session: Session = Depends(get_session)):
     n_pricier = sum(1 for p in comparable_prices if p > current.price_cents)
     percentile_score = round(n_pricier / n_comparable * 100, 1) if n_comparable else None
 
-    list_price_ever_charged = any(s.price_cents == s.list_price_cents for s in history)
+    stats = price_stats(
+        [
+            Snapshot(captured_at=s.captured_at, price_cents=s.price_cents, list_price_cents=s.list_price_cents)
+            for s in history
+        ]
+    )
 
     return VariantDetailResponse(
         variant_id=variant.id,
@@ -73,7 +85,20 @@ def variant_detail(variant_id: int, session: Session = Depends(get_session)):
         in_stock=current.in_stock,
         percentile_score=percentile_score,
         comparable_count=n_comparable,
-        list_price_ever_charged=list_price_ever_charged,
+        list_price_ever_charged=stats.list_price_ever_charged,
+        price_stats=PriceStatsResponse(
+            all_time_low_eur=stats.all_time_low_cents / 100,
+            all_time_high_eur=stats.all_time_high_cents / 100,
+            low_30d_eur=stats.low_30d_cents / 100 if stats.low_30d_cents is not None else None,
+            low_90d_eur=stats.low_90d_cents / 100 if stats.low_90d_cents is not None else None,
+            median_90d_eur=stats.median_90d_cents / 100 if stats.median_90d_cents is not None else None,
+            is_all_time_low=stats.is_all_time_low,
+            days_since_cheaper=stats.days_since_cheaper,
+            claimed_discount_pct=stats.claimed_discount_pct,
+            real_discount_pct=stats.real_discount_pct,
+            first_seen=stats.first_seen,
+            snapshot_count=stats.snapshot_count,
+        ),
         price_history=[
             PricePoint(
                 captured_at=s.captured_at,

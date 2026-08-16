@@ -113,6 +113,25 @@ can't show a stale price or a since-deleted article. The one exception is the Me
 als beim Merken" delta compares against. A gespeicherte Suche stores nothing but the filter
 querystring, because the URL already *is* the complete filter state.
 
+### Measured vs. claimed discount
+
+`price_snapshot` being append-only is what makes this possible, and it's the differentiator a
+price comparator without its own history can't copy: a shop's `list_price` is a number the shop
+controls, so nothing user-facing ranks by it.
+
+- `app/pricing/history.py` — pure functions (no ORM, no DB, unit-tested in
+  `tests/test_pricing_history.py`) defining what all-time low, "not cheaper since N days", and
+  **real discount** (current price vs. the highest price we ever observed being charged) mean.
+  Consumed by `/api/variants/{id}`'s `price_stats`.
+- `app/api/deals.py` — `GET /api/deals` ranks by the drop against the newest snapshot at least
+  `window_days` old. That reference point, not a max or average, is what lets the UI name a date
+  ("−49 % gegenüber 138,97 € vom 04.08."). Variants without a snapshot that old drop out rather
+  than being compared against a guessed baseline, so a long `window_days` on a freshly imported
+  catalog correctly returns nothing.
+- `GET /api/dashboard/shop-trust` rolls the per-article honesty check up per shop.
+- `price_cents` are integers — discount expressions multiply by `100.0` first, or SQL integer
+  division floors every drop to zero.
+
 ### Attribute provenance
 
 Every attribute in `product.attributes` has a matching entry in `product.attribute_sources`:

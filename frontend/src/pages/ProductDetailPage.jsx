@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { fetchVariantDetail } from "../api";
 import { recordView } from "../collections";
 import PriceChart from "../components/PriceChart";
+import PriceVerdict from "../components/PriceVerdict";
 import WatchButton from "../components/WatchButton";
 
 function formatValue(value) {
@@ -133,6 +134,9 @@ export default function ProductDetailPage() {
           )}
         </div>
       </div>
+
+      <h2 className="section-title">Preis-Einordnung</h2>
+      <PriceVerdict stats={detail.price_stats} currentPrice={detail.current_price_eur} />
 
       <h2 className="section-title">Preisverlauf</h2>
       <PriceChart points={detail.price_history} />
