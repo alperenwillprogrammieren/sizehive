@@ -12,11 +12,17 @@ from pathlib import Path
 from sqlalchemy import func, select
 
 from app.db.session import SessionLocal
-from app.importers.adapters import parse_awin_csv, parse_belboon_csv, parse_tradedoubler_xml
+from app.importers.adapters import (
+    parse_awin_csv,
+    parse_awin_live_csv,
+    parse_belboon_csv,
+    parse_tradedoubler_xml,
+)
 from app.importers.importer import find_or_create_shop, import_row
 from app.models import PriceSnapshot, Variant
 
 SAMPLES_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "samples"
+LIVE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "live"
 
 FEEDS = [
     (
@@ -24,6 +30,12 @@ FEEDS = [
         SAMPLES_DIR / "awin_jeans.csv",
         parse_awin_csv,
         {"name": "Awin Denim Store", "slug": "awin-denim-store", "affiliate_network": "Awin"},
+    ),
+    (
+        "awin-live-unipolar",
+        LIVE_DIR / "awin.csv",
+        parse_awin_live_csv,
+        {"name": "Unipolar DE", "slug": "unipolar-de", "affiliate_network": "Awin"},
     ),
     (
         "belboon",
