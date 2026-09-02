@@ -11,6 +11,8 @@ import DashboardPage from "./pages/DashboardPage";
 import DealsPage from "./pages/DealsPage";
 import LoginPage from "./pages/LoginPage";
 import WatchlistPage from "./pages/WatchlistPage";
+import ImpressumPage from "./pages/ImpressumPage";
+import DatenschutzPage from "./pages/DatenschutzPage";
 import { useWatchlist } from "./watchlistContext";
 import { useCompareList } from "./collections";
 
@@ -23,7 +25,9 @@ function App() {
     <div className="app">
       <header className="app-header">
         <div>
-          <h1>sizehive</h1>
+          <h1>
+            sizehive <span className="beta-badge" title="sizehive befindet sich im Aufbau — Funktionen und Katalog wachsen laufend.">Beta</span>
+          </h1>
           <p className="tagline">Kleidung, shopübergreifend gefiltert</p>
         </div>
         <div className="app-header-right">
@@ -62,6 +66,8 @@ function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/konto" element={<AccountPage />} />
+        <Route path="/impressum" element={<ImpressumPage />} />
+        <Route path="/datenschutz" element={<DatenschutzPage />} />
       </Routes>
 
       <CompareBar />

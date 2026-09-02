@@ -41,6 +41,43 @@ body {
   color: var(--text-muted);
 }
 
+.beta-badge {
+  display: inline-block;
+  vertical-align: middle;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  cursor: help;
+}
+
+.app-footer {
+  margin-top: 3rem;
+  padding: 1.25rem 0 2rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+  display: flex;
+  gap: 1.25rem;
+}
+
+.app-footer a {
+  color: var(--text-muted);
+}
+
+.impressum-page {
+  max-width: 640px;
+}
+
+.impressum-beta-note {
+  margin-top: 2rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
 .app-nav {
   display: flex;
   gap: 1rem;
