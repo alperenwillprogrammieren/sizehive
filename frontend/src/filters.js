@@ -3,7 +3,7 @@
 // — this mirrors the backend's generic filtering in app/api/search.py, so
 // a new category's attributes (e.g. "sleeve", "upper_material") work here
 // without any frontend code change either.
-export const MULTI_KEYS = ["brand", "color", "category"];
+export const MULTI_KEYS = ["brand", "color", "category", "gender"];
 export const RANGE_KEYS = ["size_w", "size_l", "price_min", "price_max"];
 const RESERVED_KEYS = new Set([
   ...MULTI_KEYS,
@@ -21,6 +21,7 @@ export const DEFAULT_FILTERS = {
   brand: [],
   color: [],
   category: [],
+  gender: [],
   size_w: "",
   size_l: "",
   price_min: "",
@@ -81,13 +82,17 @@ const DESCRIBE_LABELS = {
   size_l: "L",
 };
 
+const GENDER_LABELS = { female: "Damen", male: "Herren", unisex: "Unisex" };
+
 /** Short human-readable summary of the active filters — used as the default
  *  name when saving a search. */
 export function describeFilters(f) {
   const parts = [];
   if (f.q) parts.push(`„${f.q}"`);
   for (const key of MULTI_KEYS) {
-    for (const value of f[key] || []) parts.push(String(value).replace(/_/g, " "));
+    for (const value of f[key] || []) {
+      parts.push(key === "gender" ? GENDER_LABELS[value] || value : String(value).replace(/_/g, " "));
+    }
   }
   for (const value of Object.values(f.attrs || {})) {
     if (value) parts.push(String(value).replace(/_/g, " "));

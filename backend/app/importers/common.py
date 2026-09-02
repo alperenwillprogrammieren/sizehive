@@ -1,8 +1,20 @@
+import html
 import re
 
 
 def normalize(s: str | None) -> str:
     return re.sub(r"\s+", " ", (s or "")).strip().lower()
+
+
+def clean_text(s: str | None) -> str:
+    """Decode HTML entities and collapse whitespace in feed text.
+
+    Real feeds ship HTML-escaped values ("full forest &amp; orange",
+    "&quot;Basic&quot;"), which we render verbatim into colour names,
+    titles and descriptions. Escaping is an artefact of how the shop's CMS
+    serialises the field, not part of the value.
+    """
+    return re.sub(r"\s+", " ", html.unescape(s or "")).strip()
 
 
 def derive_model_name(title: str, brand: str) -> str:

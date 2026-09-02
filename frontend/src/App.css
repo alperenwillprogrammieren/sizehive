@@ -242,14 +242,93 @@ body {
 
 .facet-group {
   margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 1.25rem;
 }
 
-.facet-group h3 {
+.facet-group:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.facet-group-plain {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 1.25rem;
+}
+
+.facet-group summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--text-muted);
-  margin: 0 0 0.5rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.facet-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.facet-group summary:hover {
+  color: var(--text);
+}
+
+.facet-group summary::after {
+  content: "";
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+
+.facet-group[open] summary::after {
+  transform: rotate(-135deg);
+}
+
+.facet-group-body {
+  margin-top: 0.6rem;
+}
+
+.facet-search {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.facet-search:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.facet-more {
+  margin-top: 0.35rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.facet-empty {
+  color: var(--text-faint);
+  font-size: 0.82rem;
+  padding: 0.2rem 0;
 }
 
 .range-inputs {
@@ -348,6 +427,12 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 1rem;
+  transition: opacity 0.15s ease;
+}
+
+.results-grid-loading {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .result-card {
@@ -357,18 +442,42 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.result-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+  border-color: var(--border-strong);
 }
 
 .result-image-wrap {
   position: relative;
+  overflow: hidden;
+  background: var(--image-bg);
 }
 
 .result-card img {
   width: 100%;
   aspect-ratio: 4 / 5;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
   background: var(--image-bg);
+  transition: transform 0.25s ease;
+}
+
+/* Feed images are the shops' originals (~1600px), so a modest scale-up on
+   hover stays sharp instead of turning into a blurry upscale. */
+.result-card:hover img {
+  transform: scale(1.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .result-card img,
+  .result-card:hover img {
+    transition: none;
+    transform: none;
+  }
 }
 
 .image-placeholder {
@@ -420,10 +529,154 @@ body {
   border-color: var(--danger);
 }
 
-.watch-button-overlay {
+.card-overlay-actions {
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.compare-button {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 999px;
+  width: 2rem;
+  height: 2rem;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.compare-button:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.compare-button.active {
+  color: var(--invert-text);
+  background: var(--invert-bg);
+  border-color: var(--invert-bg);
+}
+
+.compare-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Vergleich */
+
+.compare-bar {
+  position: fixed;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.65rem 1rem;
+  background: var(--invert-bg);
+  color: var(--invert-text);
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  font-size: 0.88rem;
+  z-index: 30;
+}
+
+.compare-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.compare-bar-link {
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--invert-text);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.compare-bar .text-button {
+  color: var(--invert-text-muted);
+}
+
+.compare-bar .text-button:hover {
+  color: var(--invert-text);
+}
+
+.compare-table-wrap {
+  overflow-x: auto;
+}
+
+.compare-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 480px;
+}
+
+.compare-table th,
+.compare-table td {
+  border: 1px solid var(--border);
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+  font-size: 0.88rem;
+}
+
+.compare-table thead th {
+  min-width: 160px;
+  position: relative;
+  background: var(--surface);
+}
+
+.compare-table tbody th {
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--surface);
+}
+
+.compare-image {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: contain;
+  background: var(--image-bg);
+  border-radius: 8px;
+  display: block;
+}
+
+.compare-title {
+  display: block;
+  margin-top: 0.4rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.compare-remove {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.compare-remove:hover {
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 .result-info {
@@ -456,6 +709,28 @@ body {
 }
 
 .price-current {
+  font-weight: 700;
+}
+
+/* A reduced price is tinted, matching the badge on the image — a plain price
+   stays neutral so "cheap" never reads as a status colour. */
+.price-current.reduced {
+  color: var(--danger);
+}
+
+/* Discount as a corner badge on the image rather than a third item in the
+   price row: it survives being scanned at grid speed, which is the whole
+   point of a results page. */
+.discount-badge {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 1;
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.76rem;
   font-weight: 700;
 }
 
@@ -511,6 +786,12 @@ body {
   cursor: default;
 }
 
+.filter-drawer-toggle,
+.filter-drawer-close,
+.filter-backdrop {
+  display: none;
+}
+
 @media (max-width: 720px) {
   .app-body {
     grid-template-columns: 1fr;
@@ -518,6 +799,68 @@ body {
 
   .facet-sidebar {
     position: static;
+  }
+
+  /* Filters collapse into a slide-in drawer on small screens — a static
+     sidebar doesn't fit next to results on a 375px viewport (most traffic
+     is mobile), so it's hidden until explicitly opened. */
+  .filter-drawer-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.85rem;
+    cursor: pointer;
+    order: -1;
+  }
+
+  .filter-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 40;
+  }
+
+  .facet-sidebar-wrap {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(85vw, 340px);
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    z-index: 41;
+    overflow-y: auto;
+    background: var(--bg);
+    padding: 1rem;
+    box-shadow: 2px 0 16px rgba(0, 0, 0, 0.2);
+  }
+
+  .facet-sidebar-wrap.open {
+    transform: translateX(0);
+  }
+
+  .facet-sidebar-wrap .facet-sidebar {
+    border: none;
+    padding: 0;
+  }
+
+  .filter-drawer-close {
+    display: block;
+    width: 100%;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.85rem;
+    cursor: pointer;
   }
 }
 
@@ -596,7 +939,7 @@ body {
 .variant-strip-item img {
   width: 104px;
   aspect-ratio: 4 / 5;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 8px;
   background: var(--image-bg);
   border: 1px solid var(--border);
@@ -1087,7 +1430,7 @@ body {
 .similar-item .image-placeholder {
   width: 150px;
   aspect-ratio: 4 / 5;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 8px;
   background: var(--image-bg);
   border: 1px solid var(--border);
@@ -1263,16 +1606,40 @@ body {
 
 .detail-layout {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: minmax(320px, 440px) 1fr;
   gap: 2rem;
+}
+
+/* Wrapper exists so the image can scale inside a clipped, rounded frame —
+   scaling the <img> alone would spill past the corners. */
+.detail-image-frame {
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--image-bg);
+  border: 1px solid var(--border);
 }
 
 .detail-image {
   width: 100%;
   aspect-ratio: 4 / 5;
-  object-fit: cover;
-  border-radius: 12px;
+  object-fit: contain;
+  display: block;
   background: var(--image-bg);
+  transition: transform 0.3s ease;
+}
+
+/* Worth doing here specifically: the source is the shop's ~1600px original,
+   so zooming reveals real fabric/stitching detail rather than upscaling. */
+.detail-image-frame:hover .detail-image {
+  transform: scale(1.7);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-image,
+  .detail-image-frame:hover .detail-image {
+    transition: none;
+    transform: none;
+  }
 }
 
 .detail-brand {

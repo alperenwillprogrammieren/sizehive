@@ -17,6 +17,7 @@ class NullExtractor:
 
 _EXTRACTORS: dict[str, AttributeExtractor] = {
     "Herrenjeans": RuleBasedExtractor(),
+    "Damenjeans": RuleBasedExtractor(),
     "T-Shirts": TShirtExtractor(),
     "Sneaker": SneakerExtractor(),
 }

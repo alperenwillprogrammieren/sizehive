@@ -30,7 +30,12 @@
   --negative-bg: #fdecec;
   --negative-text: #a3172c;
 
-  --image-bg: #ebebef;
+  /* Product photography in the feeds is shot on white. Since images are
+     rendered with object-fit: contain (never cropped), any non-white panel
+     shows as a visible frame around every photo — so this stays white in
+     both themes rather than following --surface. Same reason fashion sites
+     keep light product tiles in dark mode. */
+  --image-bg: #ffffff;
 
   /* Data-viz tokens. Validated per mode against the surface the charts
      actually render on (--surface): lightness band, chroma floor, CVD
@@ -76,7 +81,8 @@
   --negative-bg: #3a1620;
   --negative-text: #ff9dab;
 
-  --image-bg: #26262b;
+  /* Deliberately NOT darkened — see the note on --image-bg above. */
+  --image-bg: #ffffff;
 
   /* The same hues, stepped for the dark surface and validated as their own
      set — not an automatic flip of the light values. */

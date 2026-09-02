@@ -17,6 +17,7 @@ export default function SearchPage() {
   const [facetsData, setFacetsData] = useState({ facets: {} });
   const [loading, setLoading] = useState(false);
   const [qInput, setQInput] = useState(filters.q);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const recentlyViewed = useRecentlyViewed();
 
   useEffect(() => {
@@ -120,16 +121,25 @@ export default function SearchPage() {
       <SavedSearches filters={filters} onApply={applySavedSearch} />
 
       <div className="app-body">
-        <FacetSidebar
-          facets={facetsData.facets}
-          filters={filters}
-          onUpdateField={updateField}
-          onToggleMulti={toggleMultiFilter}
-          onUpdateAttr={updateAttr}
-        />
+        {mobileFiltersOpen && <div className="filter-backdrop" onClick={() => setMobileFiltersOpen(false)} />}
+        <div className={`facet-sidebar-wrap${mobileFiltersOpen ? " open" : ""}`}>
+          <button type="button" className="filter-drawer-close" onClick={() => setMobileFiltersOpen(false)}>
+            Filter schließen ×
+          </button>
+          <FacetSidebar
+            facets={facetsData.facets}
+            filters={filters}
+            onUpdateField={updateField}
+            onToggleMulti={toggleMultiFilter}
+            onUpdateAttr={updateAttr}
+          />
+        </div>
 
         <main className="results-area">
           <div className="results-toolbar">
+            <button type="button" className="filter-drawer-toggle" onClick={() => setMobileFiltersOpen(true)}>
+              Filter
+            </button>
             <span>
               {searchData.total} Treffer
               {searchData.fuzzy && (

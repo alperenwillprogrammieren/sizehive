@@ -73,7 +73,7 @@ FUZZY_THRESHOLD = 0.4
 @dataclass
 class SearchFilters:
     category: list[str] | None = None
-    gender: str | None = None
+    gender: list[str] | None = None
     brand: list[str] | None = None
     color: list[str] | None = None
     size_w: int | None = None
@@ -92,7 +92,7 @@ class SearchFilters:
 def search_filters(
     request: Request,
     category: list[str] | None = Query(None, description="Repeat for multiple categories"),
-    gender: str | None = Query(None),
+    gender: list[str] | None = Query(None, description="male/female/unisex, repeat for multiple"),
     brand: list[str] | None = Query(None, description="Repeat for multiple brands"),
     color: list[str] | None = Query(None, description="Canonical color slug, e.g. dark_blue"),
     size_w: int | None = Query(None),
@@ -138,7 +138,7 @@ def filters_from_query_string(query: str) -> SearchFilters:
 
     return SearchFilters(
         category=raw.get("category"),
-        gender=first("gender"),
+        gender=raw.get("gender"),
         brand=raw.get("brand"),
         color=raw.get("color"),
         size_w=_coerce(first("size_w"), int),
@@ -179,8 +179,8 @@ def _apply_filters(stmt, filters: SearchFilters, exclude: str | None = None):
     conditions = []
     if filters.category and exclude != "category":
         conditions.append(Product.category.in_(filters.category))
-    if filters.gender:
-        conditions.append(Product.gender == filters.gender)
+    if filters.gender and exclude != "gender":
+        conditions.append(Product.gender.in_(filters.gender))
     if filters.brand and exclude != "brand":
         conditions.append(Product.brand.in_(filters.brand))
     if filters.color and exclude != "color":
@@ -356,6 +356,7 @@ def variants_batch(
 
 FIXED_FACET_COLUMNS = {
     "category": Product.category,
+    "gender": Product.gender,
     "brand": Product.brand,
     "color": Variant.color,
 }

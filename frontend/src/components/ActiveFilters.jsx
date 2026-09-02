@@ -1,5 +1,6 @@
 const LABELS = {
   category: "Kategorie",
+  gender: "Geschlecht",
   brand: "Marke",
   color: "Farbe",
   fit: "Passform",
@@ -8,6 +9,7 @@ const LABELS = {
   wash: "Waschung",
   closure: "Verschluss",
   stretch: "Stretch",
+  fiber: "Material",
   sleeve: "Ärmel",
   neckline: "Ausschnitt",
   print: "Print",
@@ -27,19 +29,22 @@ function labelFor(key) {
   return LABELS[key] || key.replace(/_/g, " ");
 }
 
-function formatValue(value) {
+const GENDER_LABELS = { female: "Damen", male: "Herren", unisex: "Unisex" };
+
+function formatValue(key, value) {
+  if (key === "gender") return GENDER_LABELS[value] || value;
   return String(value).replace(/_/g, " ");
 }
 
 export default function ActiveFilters({ filters, onRemoveMulti, onClearField, onClearAttr, onClearAll }) {
   const chips = [];
-  for (const key of ["category", "brand", "color"]) {
+  for (const key of ["category", "gender", "brand", "color"]) {
     for (const value of filters[key] || []) {
-      chips.push({ label: `${labelFor(key)}: ${formatValue(value)}`, onRemove: () => onRemoveMulti(key, value) });
+      chips.push({ label: `${labelFor(key)}: ${formatValue(key, value)}`, onRemove: () => onRemoveMulti(key, value) });
     }
   }
   for (const [key, value] of Object.entries(filters.attrs || {})) {
-    if (value) chips.push({ label: `${labelFor(key)}: ${formatValue(value)}`, onRemove: () => onClearAttr(key) });
+    if (value) chips.push({ label: `${labelFor(key)}: ${formatValue(key, value)}`, onRemove: () => onClearAttr(key) });
   }
   if (filters.q) chips.push({ label: `${labelFor("q")}: ${filters.q}`, onRemove: () => onClearField("q") });
   if (filters.size_w)

@@ -13,5 +13,7 @@ export default function ProductImage({ src, alt, className = "", loading = "lazy
       </div>
     );
   }
-  return <img className={className} src={src} alt={alt} loading={loading} />;
+  // decoding="async" keeps the (now full-resolution) originals from blocking
+  // paint while a grid of them decodes.
+  return <img className={className} src={src} alt={alt} loading={loading} decoding="async" />;
 }

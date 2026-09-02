@@ -9,7 +9,8 @@ const ATTRIBUTE_LABELS = {
   rise: "Bundhöhe",
   leg_shape: "Beinform",
   wash: "Waschung",
-  material: "Material",
+  fiber: "Material",
+  material: "Zusammensetzung",
   stretch: "Stretch",
   closure: "Verschluss",
   pockets: "Taschen",
@@ -26,6 +27,9 @@ const ATTRIBUTE_LABELS = {
 function labelFor(key) {
   return ATTRIBUTE_LABELS[key] || key.replace(/_/g, " ");
 }
+
+const GENDER_LABELS = { female: "Damen", male: "Herren", unisex: "Unisex" };
+const DIMENSION_LABELS = { category: "Kategorie", brand: "Marke", gender: "Geschlecht" };
 
 /** Aggregate of the per-article discount-honesty check: across everything a
  *  shop currently advertises as reduced, how often was the struck-through
@@ -95,7 +99,15 @@ function PriceStatistics({ categories }) {
   }, [categories, category]);
 
   useEffect(() => {
-    fetchPriceDistribution(dimension).then(setDistribution).catch(console.error);
+    fetchPriceDistribution(dimension)
+      .then((data) => {
+        if (dimension !== "gender") return setDistribution(data);
+        setDistribution({
+          ...data,
+          groups: data.groups.map((g) => ({ ...g, group: GENDER_LABELS[g.group] || g.group })),
+        });
+      })
+      .catch(console.error);
   }, [dimension]);
 
   useEffect(() => {
@@ -113,6 +125,7 @@ function PriceStatistics({ categories }) {
           <select value={dimension} onChange={(e) => setDimension(e.target.value)}>
             <option value="category">Kategorie</option>
             <option value="brand">Marke</option>
+            <option value="gender">Geschlecht</option>
           </select>
         </label>
         <label>
@@ -129,9 +142,9 @@ function PriceStatistics({ categories }) {
 
       {distribution && (
         <ChartFrame
-          title={`Preisverteilung je ${dimension === "brand" ? "Marke" : "Kategorie"}`}
+          title={`Preisverteilung je ${DIMENSION_LABELS[dimension] || dimension}`}
           note="Aktuelle Preise. Balken: mittlere 50 % (p25–p75), Strich darin: Median, Antennen: günstigstes und teuerstes Angebot. Gruppen unter 5 Angeboten bleiben außen vor."
-          tableHead={[dimension === "brand" ? "Marke" : "Kategorie", "Angebote", "Min", "p25", "Median", "p75", "Max"]}
+          tableHead={[DIMENSION_LABELS[dimension] || dimension, "Angebote", "Min", "p25", "Median", "p75", "Max"]}
           tableRows={distribution.groups.map((group) => [
             group.group,
             String(group.count),

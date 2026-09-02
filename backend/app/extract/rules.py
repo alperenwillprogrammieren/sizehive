@@ -7,17 +7,27 @@ short generic words and win a higher confidence score, since a hit on
 word like "raw".
 """
 from app.extract.base import ExtractedAttribute
-from app.extract.common import extract_material, match_keywords
+from app.extract.common import (
+    extract_fiber,
+    extract_material,
+    extract_sustainability,
+    match_keywords,
+)
 
 # canonical value -> phrases that imply it, most specific first
 FIT_KEYWORDS: dict[str, list[str]] = {
     "wide leg": ["wide leg", "weites hosenbein", "ausgestelltes bein"],
     "baggy": ["baggy fit", "baggy", "extra weit geschnitten"],
+    # Women's-jeans fits. Absent from the original men's-only vocabulary,
+    # and common in the real catalogue ("Jeanshose Mom Fit", "Balloon Fit").
+    "mom": ["mom fit", "mom jeans", "mum fit"],
+    "balloon": ["balloon fit", "ballon fit", "balloon leg"],
+    "boyfriend": ["boyfriend fit", "boyfriend jeans", "boyfriend"],
     "skinny": ["skinny fit", "skinny cut", "skinny"],
     "slim": ["slim fit", "slim cut", "slim tapered", "schmale passform", "slim"],
     "loose": ["loose fit", "lockere passform", "weites bein", "loose"],
     "relaxed": ["relaxed fit", "entspannte passform", "relaxed"],
-    "straight": ["straight fit", "straight leg", "gerades bein", "straight"],
+    "straight": ["straight fit", "straight leg", "gerades bein", "geradem bein", "straight"],
     "regular": ["regular fit", "klassische passform", "regular"],
 }
 RISE_KEYWORDS: dict[str, list[str]] = {
@@ -29,7 +39,10 @@ LEG_SHAPE_KEYWORDS: dict[str, list[str]] = {
     "bootcut": ["bootcut", "leicht ausgestellt"],
     "flared": ["flared", "schlaghose"],
     "tapered": ["tapered leg", "verjüngtes bein", "tapered"],
-    "straight": ["straight leg", "gerades bein"],
+    "wide": ["wide leg", "weites bein", "weitem bein"],
+    # German inflects the adjective, so the nominative form alone misses
+    # "mit geradem Bein" — the phrasing the real feed actually uses.
+    "straight": ["straight leg", "gerades bein", "geradem bein"],
 }
 WASH_KEYWORDS: dict[str, list[str]] = {
     "stonewashed": ["stonewashed", "stone washed"],
@@ -45,11 +58,6 @@ CLOSURE_KEYWORDS: dict[str, list[str]] = {
     "button_fly": ["knopfleiste", "button fly"],
     "zip_fly": ["reißverschluss", "zip fly", "zipper"],
 }
-SUSTAINABILITY_KEYWORDS: dict[str, list[str]] = {
-    "gots": ["gots"],
-    "organic_cotton": ["bio-baumwolle", "organic cotton", "bio baumwolle"],
-}
-
 import re
 
 _POCKETS_RE = re.compile(r"(\d{1,2})\s*(?:taschen|pockets)", re.IGNORECASE)
@@ -83,13 +91,16 @@ class RuleBasedExtractor:
         elif "stretch" in text_lower:
             result["stretch"] = ExtractedAttribute(value=True, source="rule", confidence=0.7)
 
+        fiber = extract_fiber(text_lower)
+        if fiber:
+            value, confidence = fiber
+            result["fiber"] = ExtractedAttribute(value=value, source="rule", confidence=confidence)
+
         pockets = _POCKETS_RE.search(text_lower)
         if pockets:
             result["pockets"] = ExtractedAttribute(value=int(pockets.group(1)), source="rule", confidence=0.75)
 
-        sustainability_tags = [
-            tag for tag, phrases in SUSTAINABILITY_KEYWORDS.items() if any(p in text_lower for p in phrases)
-        ]
+        sustainability_tags = extract_sustainability(text_lower)
         if sustainability_tags:
             result["sustainability"] = ExtractedAttribute(
                 value=sustainability_tags, source="rule", confidence=0.85,

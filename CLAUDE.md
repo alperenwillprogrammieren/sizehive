@@ -26,10 +26,14 @@ docker compose up -d db                             # Postgres (host port 55432,
 Backend (from `backend/`, with `.venv` activated):
 ```bash
 alembic upgrade head                                 # apply migrations
-python -m app.importers.run                          # load backend/data/samples/*.{csv,xml}
+python -m app.importers.fetch                        # download the real Awin feed (needs AWIN_FEED_URL)
+python -m app.importers.run                          # import real feeds from backend/data/live/
+python -m app.importers.run --with-samples           # ...plus the generated fixtures in data/samples/
+python scripts/purge_sample_shops.py                 # drop sample-fixture shops from a real-data DB
 python -m app.extract.run                             # run attribute extraction, print coverage
 python scripts/simulate_price_history.py              # optional: backfill demo price history
 python -m app.notify.run                              # send price alerts + search-agent digests
+python scripts/daily_update.py                        # fetch → import → extract → notify, in one go
 uvicorn app.main:app --reload --port 8000              # http://localhost:8000/docs
 python -m pytest tests/    # unit tests (normalizers, extractors, price stats, alert rules, tokens)
 python scripts/generate_sample_feeds.py                # regenerate backend/data/samples/*
@@ -205,6 +209,34 @@ controls, so nothing user-facing ranks by it.
 - `price_cents` are integers — discount expressions multiply by `100.0` first, or SQL integer
   division floors every drop to zero.
 
+### Extractor vocabularies are tuned against the *real* corpus
+
+The original extractors were written and validated against
+`scripts/generate_sample_feeds.py` output — which was generated to contain
+exactly the phrases the rules look for. That closed loop reported ~37 % coverage for
+`wash`/`rise`/`leg_shape`/`closure`/`material` on jeans and ~22 % for `sole_type`/`closure_type` on
+sneakers; against real shop copy all of those were **0 %**. When touching an extractor, measure on
+real data (`python -m app.extract.run` prints per-category coverage), never on the fixtures.
+
+Two rules that fall out of German shop copy specifically:
+
+- **Word-start anchoring, not substring** (`phrase_in` in `app/extract/common.py`). German compounds
+  prepend, so a plain `"wolle" in text` tags every *Baumwolle* product as wool. The phrase start is
+  anchored to a word boundary; the *end* deliberately is not, because inflection appends
+  (`"recycelt"` must keep matching *recycelter*).
+- **`fiber` vs `material`.** `extract_material` parses compositions ("98 % Baumwolle, 2 % Elasthan")
+  and feeds the `cotton_min` filter. Real copy usually names a fibre with no percentage at all
+  ("T-Shirt aus Ecovero"), so `fiber` captures that as a separate, facetable scalar.
+- **`sustainability` holds verifiable claims only** — GOTS, bio-zertifiziert, fair, vegan, recycelt.
+  Bare marketing adjectives ("nachhaltig") are deliberately excluded: mixing an unverifiable
+  self-description in with GOTS makes the filter meaningless, which is the same principle as not
+  ranking by a shop-controlled `list_price`.
+
+`tests/test_extract_real_corpus.py` pins all of this to strings copied from live products.
+
+Feed text is HTML-escaped at source ("full forest &amp;amp; orange"); `clean_text` in
+`app/importers/common.py` unescapes it during import.
+
 ### Attribute provenance
 
 Every attribute in `product.attributes` has a matching entry in `product.attribute_sources`:
@@ -237,9 +269,30 @@ produces deliberately messy multi-category data (mixed size notations, ~20% miss
 inconsistent brand spellings, attributes only in free text). Because this is local sample data with
 no real users, the established pattern after any schema or normalization change during development
 has been: `alembic downgrade base && alembic upgrade head`, then re-run
-`app.importers.run` → `app.extract.run` → `scripts/simulate_price_history.py`. That stops being
-appropriate once real affiliate feeds are wired up — at that point schema changes need a real
-migration with backfill, not a reset.
+`app.importers.run --with-samples` → `app.extract.run` → `scripts/simulate_price_history.py`. That
+stops being appropriate once real affiliate feeds are wired up — at that point schema changes need a
+real migration with backfill, not a reset.
+
+**That point has been reached**: the database now holds the real Unipolar feed, so
+`app.importers.run` imports live feeds only and the fixtures are opt-in behind `--with-samples`.
+Sample rows carry picsum.photos placeholder images and invented brands, which are
+indistinguishable from real products in the UI once mixed in. `scripts/purge_sample_shops.py`
+removes them again if they do get imported.
+
+`scripts/daily_update.py` chains fetch → import → extract → notify and is registered as the Windows
+scheduled task "sizehive daily update" (daily 05:00, per-user, `scripts/daily_update.bat` wrapper).
+It exists because price history only accrues through repeated imports — a catalogue imported once
+makes every article look like it has always cost today's price, which blinds the whole
+measured-vs-claimed-discount feature. A failed fetch aborts before the import rather than
+re-importing yesterday's file, which would append a duplicate-price snapshot into that history.
+Note **extraction must follow every import**: new products land with empty `attributes` until
+`app.extract.run` has seen them, and stale extraction silently empties the facet sidebar.
+
+Variant `image_url` and `url` are **refreshed on every import** (see `find_or_create_variant`) —
+unlike price, they carry no history worth keeping, and a moved image or rotated affiliate deeplink
+just means the stored value is wrong. Identity fields (`shop_sku`, `ean`, size, color) are never
+touched. The real Awin feed's `merchant_image_url` (the shop's original, ~1600px) is preferred over
+`aw_image_url`, whose CDN caps height at 200px.
 
 ## Explicitly out of scope
 

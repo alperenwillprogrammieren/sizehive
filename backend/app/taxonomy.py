@@ -7,6 +7,7 @@ parameters.
 
 CATEGORIES: dict[str, dict] = {
     "Herrenjeans": {"gender": "male", "extractor": "jeans"},
+    "Damenjeans": {"gender": "female", "extractor": "jeans"},
     "T-Shirts": {"gender": "unisex", "extractor": "tshirts"},
     "Sneaker": {"gender": "unisex", "extractor": "sneakers"},
 }

@@ -9,8 +9,10 @@ import { readStore, subscribeStore, writeStore } from "./localStore";
 const WATCHLIST_KEY = "sizehive.watchlist.v1";
 const SAVED_SEARCHES_KEY = "sizehive.saved-searches.v1";
 const RECENT_KEY = "sizehive.recently-viewed.v1";
+const COMPARE_KEY = "sizehive.compare.v1";
 
 const RECENT_LIMIT = 12;
+export const COMPARE_LIMIT = 4;
 
 function useKey(key, fallback) {
   const subscribe = useCallback((callback) => subscribeStore(key, callback), [key]);
@@ -94,4 +96,39 @@ export function recordView(variantId) {
 
 export function clearRecentlyViewed() {
   writeStore(RECENT_KEY, []);
+}
+
+/* -------------------------------------------------------------- Vergleich */
+
+// Just variant ids, same rationale as the other collections — the compare
+// page re-fetches live data so it can never show a stale price or attribute.
+
+export function useCompareList() {
+  return useKey(COMPARE_KEY, []);
+}
+
+export function readCompareList() {
+  return readStore(COMPARE_KEY, []);
+}
+
+/** Adds or removes; returns `false` (and leaves the list unchanged) when
+ *  adding would exceed COMPARE_LIMIT so callers can show a hint. */
+export function toggleCompare(variantId) {
+  const current = readStore(COMPARE_KEY, []);
+  if (current.includes(variantId)) {
+    writeStore(COMPARE_KEY, current.filter((id) => id !== variantId));
+    return true;
+  }
+  if (current.length >= COMPARE_LIMIT) return false;
+  writeStore(COMPARE_KEY, [...current, variantId]);
+  return true;
+}
+
+export function removeFromCompare(variantId) {
+  const current = readStore(COMPARE_KEY, []);
+  writeStore(COMPARE_KEY, current.filter((id) => id !== variantId));
+}
+
+export function clearCompare() {
+  writeStore(COMPARE_KEY, []);
 }

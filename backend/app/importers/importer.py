@@ -54,6 +54,14 @@ def find_or_create_variant(session: Session, shop: Shop, product: Product, row: 
     stmt = select(Variant).where(Variant.shop_id == shop.id, Variant.shop_sku == row["shop_sku"])
     variant = session.scalars(stmt).first()
     if variant is not None:
+        # Refresh the two shop-controlled presentation fields. Unlike price
+        # (append-only history) these carry no history worth keeping: a moved
+        # image or a rotated affiliate deeplink means the stored value is
+        # simply wrong, and we render it directly. Identity fields
+        # (shop_sku, ean, size, color) stay put — changing those would mean
+        # it's a different variant, not an updated one.
+        variant.image_url = row.get("image_url", "")
+        variant.url = row["deeplink_url"]
         return variant, False
     size_w, size_l = parse_size(row["size_raw"])
     variant = Variant(

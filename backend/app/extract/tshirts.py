@@ -5,10 +5,17 @@ different keyword taxonomy — this is the proof that adding a category is
 "write one extractor", not "touch the pipeline".
 """
 from app.extract.base import ExtractedAttribute
-from app.extract.common import extract_material, match_keywords
+from app.extract.common import (
+    extract_fiber,
+    extract_material,
+    extract_sustainability,
+    match_keywords,
+)
 
 FIT_KEYWORDS: dict[str, list[str]] = {
     "oversized": ["oversized", "oversize fit", "extra weit geschnitten"],
+    "loose": ["loose fit", "lockere passform"],
+    "boxy": ["boxy fit", "boxy"],
     "slim": ["slim fit", "schmale passform", "slim"],
     "relaxed": ["relaxed fit", "entspannte passform", "relaxed"],
     "regular": ["regular fit", "klassische passform", "regular"],
@@ -21,6 +28,7 @@ SLEEVE_KEYWORDS: dict[str, list[str]] = {
 NECKLINE_KEYWORDS: dict[str, list[str]] = {
     "v_neck": ["v-neck", "v-ausschnitt"],
     "polo": ["polo kragen", "polo collar", "polokragen"],
+    "boat": ["u-boot-ausschnitt", "boat neck"],
     "crew": ["crew neck", "rundhalsausschnitt", "rundhals"],
 }
 PRINT_KEYWORDS: dict[str, list[str]] = {
@@ -57,5 +65,16 @@ class TShirtExtractor:
             )
         elif "stretch" in text_lower:
             result["stretch"] = ExtractedAttribute(value=True, source="rule", confidence=0.7)
+
+        fiber = extract_fiber(text_lower)
+        if fiber:
+            value, confidence = fiber
+            result["fiber"] = ExtractedAttribute(value=value, source="rule", confidence=confidence)
+
+        sustainability_tags = extract_sustainability(text_lower)
+        if sustainability_tags:
+            result["sustainability"] = ExtractedAttribute(
+                value=sustainability_tags, source="rule", confidence=0.85,
+            )
 
         return result

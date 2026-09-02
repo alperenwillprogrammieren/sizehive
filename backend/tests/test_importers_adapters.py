@@ -5,7 +5,8 @@ from app.importers.adapters import parse_awin_live_csv
 FIELDS = [
     "merchant_product_id", "merchant_product_category_path", "brand_name",
     "product_name", "description", "colour", "search_price", "rrp_price",
-    "in_stock", "Fashion:size", "product_GTIN", "aw_image_url", "aw_deep_link",
+    "in_stock", "Fashion:size", "product_GTIN", "aw_image_url",
+    "merchant_image_url", "aw_deep_link",
 ]
 
 
@@ -31,6 +32,7 @@ def _row(**overrides):
         "Fashion:size": "W32L34",
         "product_GTIN": "4062678092905",
         "aw_image_url": "https://images2.productserve.com/example.jpg",
+        "merchant_image_url": "https://uni-polar.de/media/example.jpg",
         "aw_deep_link": "https://www.awin1.com/pclick.php?p=1&a=3059091&m=106791",
     }
     row.update(overrides)
@@ -56,11 +58,52 @@ def test_maps_mens_jeans_category(tmp_path):
     assert row["deeplink_url"] == "https://www.awin1.com/pclick.php?p=1&a=3059091&m=106791"
 
 
-def test_skips_womens_jeans_out_of_scope(tmp_path):
+def test_prefers_merchant_image_over_awin_thumbnail(tmp_path):
+    """Awin's aw_image_url is a 200px-capped letterbox thumbnail; the shop's
+    own image is full resolution, so that one wins when present."""
+    path = tmp_path / "awin.csv"
+    _write_feed(path, [_row()])
+
+    rows = list(parse_awin_live_csv(path))
+
+    assert rows[0]["image_url"] == "https://uni-polar.de/media/example.jpg"
+
+
+def test_falls_back_to_awin_image_when_merchant_image_missing(tmp_path):
+    path = tmp_path / "awin.csv"
+    _write_feed(path, [_row(merchant_image_url="")])
+
+    rows = list(parse_awin_live_csv(path))
+
+    assert rows[0]["image_url"] == "https://images2.productserve.com/example.jpg"
+
+
+def test_html_entities_in_feed_text_are_decoded(tmp_path):
+    """The live feed ships HTML-escaped values ("full forest &amp; orange")
+    that we render verbatim into colour names and titles."""
+    path = tmp_path / "awin.csv"
+    _write_feed(path, [_row(
+        colour="full forest &amp; orange",
+        product_name="Levi&#039;s &quot;501&quot; Straight",
+        description="Jeans mit Knopf &amp; Reissverschluss",
+    )])
+
+    row = next(iter(parse_awin_live_csv(path)))
+
+    assert row["color"] == "full forest & orange"
+    assert row["description"] == "Jeans mit Knopf & Reissverschluss"
+    assert "&quot;" not in row["model_name"] and "&#039;" not in row["model_name"]
+
+
+def test_maps_womens_jeans_category(tmp_path):
     path = tmp_path / "awin.csv"
     _write_feed(path, [_row(merchant_product_category_path="Damen > Hosen > Jeans")])
 
-    assert list(parse_awin_live_csv(path)) == []
+    rows = list(parse_awin_live_csv(path))
+
+    assert len(rows) == 1
+    assert rows[0]["category"] == "Damenjeans"
+    assert rows[0]["gender"] == "female"
 
 
 def test_skips_unmapped_category(tmp_path):

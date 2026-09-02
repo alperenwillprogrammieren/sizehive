@@ -192,7 +192,7 @@ def similar_variants(
     return SimilarResponse(results=results)
 
 
-PRICE_DIMENSIONS = {"brand": Product.brand, "category": Product.category}
+PRICE_DIMENSIONS = {"brand": Product.brand, "category": Product.category, "gender": Product.gender}
 
 #: Groups below this are dropped from the distributions — a "median" over
 #: three articles is noise presented as a statistic.
@@ -205,12 +205,12 @@ def _percentile(fraction: float, column):
 
 @router.get("/dashboard/price-distribution", response_model=PriceDistributionResponse)
 def price_distribution(
-    dimension: str = Query("category", description="brand | category"),
+    dimension: str = Query("category", description="brand | category | gender"),
     session: Session = Depends(get_session),
 ):
-    """Five-number summary of current prices per brand or category."""
+    """Five-number summary of current prices per brand, category, or gender."""
     if dimension not in PRICE_DIMENSIONS:
-        raise HTTPException(status_code=422, detail="dimension must be 'brand' or 'category'")
+        raise HTTPException(status_code=422, detail="dimension must be 'brand', 'category', or 'gender'")
     column = PRICE_DIMENSIONS[dimension]
 
     price = PriceSnapshot.price_cents

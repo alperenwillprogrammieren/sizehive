@@ -8,6 +8,7 @@ import PriceVerdict from "../components/PriceVerdict";
 import ProductImage from "../components/ProductImage";
 import SimilarProducts from "../components/SimilarProducts";
 import WatchButton from "../components/WatchButton";
+import CompareButton from "../components/CompareButton";
 
 function formatValue(value) {
   return String(value).replace(/_/g, " ");
@@ -20,7 +21,8 @@ const ATTRIBUTE_LABELS = {
   wash: "Waschung",
   closure: "Verschluss",
   stretch: "Stretch",
-  material: "Material",
+  fiber: "Material",
+  material: "Zusammensetzung",
   pockets: "Taschen",
   sustainability: "Nachhaltigkeit",
   sleeve: "Ärmel",
@@ -86,12 +88,14 @@ export default function ProductDetailPage() {
       </Link>
 
       <div className="detail-layout">
-        <ProductImage
-          className="detail-image"
-          src={detail.image_url}
-          alt={`${detail.brand} ${detail.model_name}`}
-          loading="eager"
-        />
+        <div className="detail-image-frame" title="Zum Vergrößern mit der Maus darüberfahren">
+          <ProductImage
+            className="detail-image"
+            src={detail.image_url}
+            alt={`${detail.brand} ${detail.model_name}`}
+            loading="eager"
+          />
+        </div>
 
         <div className="detail-info">
           <div className="result-category">{detail.category}</div>
@@ -107,6 +111,7 @@ export default function ProductDetailPage() {
               <span className="price-list">{detail.current_list_price_eur.toFixed(2)} €</span>
             )}
             <WatchButton variantId={detail.variant_id} priceEur={detail.current_price_eur} />
+            <CompareButton variantId={detail.variant_id} />
           </div>
           {!detail.in_stock && <div className="out-of-stock">Nicht verfügbar</div>}
 

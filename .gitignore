@@ -12,6 +12,9 @@ venv/
 # Downloaded real feeds (vs. checked-in generated samples in backend/data/samples/)
 backend/data/live/
 
+# Run logs from scripts/daily_update.py
+backend/data/logs/
+
 # Node / frontend
 node_modules/
 frontend/dist/

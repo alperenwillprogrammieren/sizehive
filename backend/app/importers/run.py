@@ -1,12 +1,19 @@
-"""Import all local sample feeds into the database.
+"""Import feeds into the database.
 
 Idempotent: re-running this must not create duplicate variants (matched by
 shop_id + shop_sku) or duplicate products (matched by normalized brand +
 model_name + category + gender), but every row always appends a fresh
 price_snapshot.
 
-Usage: python -m app.importers.run
+Real feeds are imported by default. The generated sample fixtures under
+data/samples/ are opt-in via --with-samples: once a database holds real
+affiliate data, silently mixing placeholder products back in on every
+import is worse than useless — their picsum.photos images and invented
+brands are indistinguishable from real rows in the UI.
+
+Usage: python -m app.importers.run [--with-samples]
 """
+import argparse
 from pathlib import Path
 
 from sqlalchemy import func, select
@@ -24,18 +31,21 @@ from app.models import PriceSnapshot, Variant
 SAMPLES_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "samples"
 LIVE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "live"
 
-FEEDS = [
-    (
-        "awin",
-        SAMPLES_DIR / "awin_jeans.csv",
-        parse_awin_csv,
-        {"name": "Awin Denim Store", "slug": "awin-denim-store", "affiliate_network": "Awin"},
-    ),
+LIVE_FEEDS = [
     (
         "awin-live-unipolar",
         LIVE_DIR / "awin.csv",
         parse_awin_live_csv,
         {"name": "Unipolar DE", "slug": "unipolar-de", "affiliate_network": "Awin"},
+    ),
+]
+
+SAMPLE_FEEDS = [
+    (
+        "awin",
+        SAMPLES_DIR / "awin_jeans.csv",
+        parse_awin_csv,
+        {"name": "Awin Denim Store", "slug": "awin-denim-store", "affiliate_network": "Awin"},
     ),
     (
         "belboon",
@@ -52,10 +62,11 @@ FEEDS = [
 ]
 
 
-def run_import() -> None:
+def run_import(with_samples: bool = False) -> None:
+    feeds = LIVE_FEEDS + SAMPLE_FEEDS if with_samples else LIVE_FEEDS
     session = SessionLocal()
     try:
-        for key, path, parser, shop_meta in FEEDS:
+        for key, path, parser, shop_meta in feeds:
             if not path.exists():
                 print(f"[{key}] skipped, file not found: {path}")
                 continue
@@ -79,4 +90,10 @@ def run_import() -> None:
 
 
 if __name__ == "__main__":
-    run_import()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--with-samples",
+        action="store_true",
+        help="also import the generated fixtures under data/samples/ (placeholder data)",
+    )
+    run_import(with_samples=parser.parse_args().with_samples)

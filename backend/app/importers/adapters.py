@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Iterator
 
-from app.importers.common import derive_model_name, parse_price_cents
+from app.importers.common import clean_text, derive_model_name, parse_price_cents
 from app.taxonomy import gender_for_category
 
 
@@ -38,6 +38,7 @@ def parse_awin_csv(path: Path) -> Iterator[dict]:
 
 _AWIN_LIVE_CATEGORY_MAP = {
     "Herren > Hosen > Jeans": "Herrenjeans",
+    "Damen > Hosen > Jeans": "Damenjeans",
 }
 
 
@@ -46,10 +47,12 @@ def _awin_live_category(category_path: str) -> str | None:
 
     Awin's real per-advertiser datafeeds carry the shop's own category tree
     in `merchant_product_category_path` (e.g. "Herren > Hosen > Jeans"), not
-    the sample fixtures' flat `category` column. Only paths that resolve to
-    one of the three in-scope categories are imported; a "Damen > Hosen >
-    Jeans" row has no home here (Herrenjeans is men's-only per the taxonomy)
-    and is skipped rather than mis-tagged.
+    the sample fixtures' flat `category` column. Jeans need a gender-specific
+    category (Herrenjeans/Damenjeans) because the taxonomy maps one gender
+    per category; T-Shirts/Sneaker don't need that distinction — they're
+    unisex categories already, so both "Herren > ..." and "Damen > ..." paths
+    fall through to the same substring match below. Any other path (e.g. a
+    category sizehive doesn't cover yet) is skipped rather than mis-tagged.
     """
     if category_path in _AWIN_LIVE_CATEGORY_MAP:
         return _AWIN_LIVE_CATEGORY_MAP[category_path]
@@ -58,6 +61,21 @@ def _awin_live_category(category_path: str) -> str | None:
     if "Sneaker" in category_path:
         return "Sneaker"
     return None
+
+
+def _awin_live_image(row: dict) -> str:
+    """Prefer the shop's own image over Awin's CDN thumbnail.
+
+    `aw_image_url` points at Awin's image proxy with `w=200&h=200&t=letterbox`
+    baked into the URL — the height is capped at 200px server-side (raising
+    `w` only pads the letterbox wider), so those thumbnails look soft on a
+    product grid and outright bad on a detail page. `merchant_image_url` is
+    the shop's original, e.g. 1600x1600. It's present on all but a handful of
+    rows, hence the fallback — and it's read with .get() rather than indexed,
+    so a feed that stops carrying the column degrades to the thumbnail
+    instead of failing the whole import.
+    """
+    return row.get("merchant_image_url", "").strip() or row["aw_image_url"]
 
 
 def parse_awin_live_csv(path: Path) -> Iterator[dict]:
@@ -73,20 +91,21 @@ def parse_awin_live_csv(path: Path) -> Iterator[dict]:
             category = _awin_live_category(row["merchant_product_category_path"])
             if category is None:
                 continue
+            brand = clean_text(row["brand_name"])
             yield {
                 "shop_sku": row["merchant_product_id"],
                 "ean": row["product_GTIN"] or None,
-                "brand": row["brand_name"],
-                "model_name": derive_model_name(row["product_name"], row["brand_name"]),
-                "description": row["description"],
+                "brand": brand,
+                "model_name": derive_model_name(clean_text(row["product_name"]), brand),
+                "description": clean_text(row["description"]),
                 "category": category,
                 "gender": gender_for_category(category),
                 "size_raw": row["Fashion:size"],
-                "color": row["colour"],
+                "color": clean_text(row["colour"]),
                 "price_cents": parse_price_cents(row["search_price"]),
                 "list_price_cents": parse_price_cents(row["rrp_price"]),
                 "in_stock": row["in_stock"] == "1",
-                "image_url": row["aw_image_url"],
+                "image_url": _awin_live_image(row),
                 "deeplink_url": row["aw_deep_link"],
             }
 
